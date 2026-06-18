@@ -1,0 +1,277 @@
+package sequencer
+
+import (
+	"log/slog"
+	"testing"
+	"time"
+
+	"github.com/rampamac/ft8copilot/internal/config"
+	"github.com/rampamac/ft8copilot/internal/db"
+	"github.com/rampamac/ft8copilot/internal/selector"
+	"github.com/rampamac/ft8copilot/internal/wsjtx"
+)
+
+func TestParseMessage(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want parsed
+	}{
+		{"CQ CO8LY FL11", parsed{kind: msgCQ, call: "CO8LY", grid: "FL11"}},
+		{"CQ DX W6BSD CM87", parsed{kind: msgCQ, call: "W6BSD", grid: "CM87", extra: "DX"}},
+		{"CQ POTA K1ABC FN42", parsed{kind: msgCQ, call: "K1ABC", grid: "FN42", extra: "POTA"}},
+		{"CQ W1AW", parsed{kind: msgCQ, call: "W1AW"}}, // broken CQ, no grid
+		{"W6BSD CO8LY -10", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY"}},
+		{"W6BSD CO8LY RR73", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY"}},
+		{"CO8LY/P W6BSD -07", parsed{kind: msgReply, to: "CO8LY", call: "W6BSD"}},
+		{"random noise", parsed{kind: msgNone}},
+	}
+	for _, c := range cases {
+		got := parseMessage(c.msg)
+		if got != c.want {
+			t.Errorf("parseMessage(%q) = %+v, want %+v", c.msg, got, c.want)
+		}
+	}
+}
+
+func TestTxTracker(t *testing.T) {
+	tr := txTracker{max: 3}
+	const msg = "CO8LY W6BSD -10"
+	// First three observations of the same TX message must not exceed.
+	for i := 0; i < 3; i++ {
+		if tr.observe(false, true, msg) {
+			t.Fatalf("exceeded too early at i=%d", i)
+		}
+	}
+	// The fourth (retries now >= max) trips the limit and resets.
+	if !tr.observe(false, true, msg) {
+		t.Fatal("expected retry limit to be reached")
+	}
+	if tr.retries != 0 {
+		t.Errorf("retries = %d after exceed, want 0", tr.retries)
+	}
+
+	// A new TX message resets the counter.
+	tr.observe(false, true, msg)
+	tr.observe(false, true, "OTHER MSG")
+	if tr.retries != 1 {
+		t.Errorf("retries = %d after message change, want 1", tr.retries)
+	}
+	// Decoding=true means not transmitting: no counting.
+	before := tr.retries
+	tr.observe(true, true, "OTHER MSG")
+	if tr.retries != before {
+		t.Errorf("retries changed while decoding")
+	}
+}
+
+func TestSequenceSeconds(t *testing.T) {
+	if !sequenceSeconds["FT8"][2] || !sequenceSeconds["FT8"][47] {
+		t.Error("FT8 sequence seconds wrong")
+	}
+	if sequenceSeconds["FT8"][3] {
+		t.Error("FT8 should not fire at second 3")
+	}
+	if !sequenceSeconds["FT4"][0] || !sequenceSeconds["FT4"][54] {
+		t.Error("FT4 sequence seconds wrong")
+	}
+}
+
+// newTestSeq builds a Sequencer without a socket, for handler-logic tests.
+func newTestSeq(cmdBuf int) (*Sequencer, chan db.Command) {
+	ch := make(chan db.Command, cmdBuf)
+	s := &Sequencer{
+		mycall:     "W6BSD",
+		chain:      nil,
+		cmds:       ch,
+		log:        slog.New(slog.NewTextHandler(discard{}, nil)),
+		sequence:   map[int]bool{},
+		tracker:    txTracker{max: 5},
+		lastSecond: -1,
+	}
+	return s, ch
+}
+
+type discard struct{}
+
+func (discard) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestHandleDecodeCQEmitsInsert(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000 // 20m
+	s.handleDecode(&wsjtx.DecodeMsg{
+		Time:           time.Now().UTC(),
+		SNR:            -10,
+		DeltaFrequency: 1500,
+		Mode:           wsjtx.ModeFT8,
+		Message:        "CQ CO8LY FL11",
+	})
+	cmd := <-ch
+	ins, ok := cmd.(db.InsertCmd)
+	if !ok {
+		t.Fatalf("got %T, want InsertCmd", cmd)
+	}
+	if ins.Spot.Call != "CO8LY" || ins.Spot.Grid != "FL11" {
+		t.Errorf("spot = %+v, want call CO8LY grid FL11", ins.Spot)
+	}
+	if ins.Spot.Band != 20 {
+		t.Errorf("band = %d, want 20", ins.Spot.Band)
+	}
+	if ins.Spot.Packet.SNR != -10 || ins.Spot.Packet.Mode != "~" {
+		t.Errorf("packet = %+v", ins.Spot.Packet)
+	}
+}
+
+func TestHandleDecodeReplyToOtherStops(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000
+	s.current = "CO8LY" // we are working CO8LY
+	// CO8LY answers someone else (not us): we should delete it.
+	s.handleDecode(&wsjtx.DecodeMsg{Mode: wsjtx.ModeFT8, Message: "K1ABC CO8LY -05"})
+	cmd := <-ch
+	del, ok := cmd.(db.DeleteCmd)
+	if !ok {
+		t.Fatalf("got %T, want DeleteCmd", cmd)
+	}
+	if del.Call != "CO8LY" || del.Band != 20 {
+		t.Errorf("delete = %+v, want CO8LY/20", del)
+	}
+}
+
+func TestHandleDecodeReplyToUsIgnored(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000
+	s.current = "CO8LY"
+	// CO8LY answers US: that's our QSO progressing, do nothing.
+	s.handleDecode(&wsjtx.DecodeMsg{Mode: wsjtx.ModeFT8, Message: "W6BSD CO8LY -05"})
+	select {
+	case cmd := <-ch:
+		t.Fatalf("unexpected command %T", cmd)
+	default:
+	}
+}
+
+func TestHandleStatusUpdatesState(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.handleStatus(&wsjtx.Status{
+		Frequency:    14074000,
+		TXMode:       "FT8",
+		Transmitting: true,
+		TXEnabled:    true,
+		DXCall:       "CO8LY",
+		TxMessage:    "CO8LY W6BSD -10",
+	})
+	if s.frequency != 14074000 {
+		t.Errorf("frequency = %d", s.frequency)
+	}
+	if !s.txStatus {
+		t.Error("txStatus should be true")
+	}
+	if !s.sequence[2] {
+		t.Error("sequence not set to FT8")
+	}
+	cmd := <-ch
+	st, ok := cmd.(db.StatusCmd)
+	if !ok || st.Call != "CO8LY" || st.Status != 1 || st.Band != 20 {
+		t.Errorf("got %+v, want StatusCmd CO8LY/20/1", cmd)
+	}
+}
+
+// fakeSelector always returns the same candidate.
+type fakeSelector struct {
+	name string
+	cand selector.Candidate
+}
+
+func (f fakeSelector) Name() string                       { return f.name }
+func (f fakeSelector) Get(int) (selector.Candidate, bool) { return f.cand, true }
+
+func TestSequenceCheckSelectsStation(t *testing.T) {
+	s, _ := newTestSeq(4)
+	s.frequency = 14074000
+	s.txStatus = false
+	s.sequence = map[int]bool{5: true}
+
+	cand := selector.Candidate{}
+	cand.Call = "CO8LY"
+	s.chain = selector.Chain{fakeSelector{name: "Any", cand: cand}}
+
+	// Pin the clock to a second that is in the sequence set.
+	orig := nowFunc
+	nowFunc = func() time.Time {
+		return time.Date(2026, 6, 18, 12, 0, 5, 0, time.UTC)
+	}
+	defer func() { nowFunc = orig }()
+
+	s.tracker.retries = 9
+	s.sequenceCheck()
+	if s.current != "CO8LY" {
+		t.Errorf("current = %q, want CO8LY", s.current)
+	}
+	if s.tracker.retries != 0 {
+		t.Errorf("tracker not reset: retries = %d", s.tracker.retries)
+	}
+	// A second call within the same second must be a no-op (lastSecond guard).
+	s.current = ""
+	s.sequenceCheck()
+	if s.current != "" {
+		t.Error("sequenceCheck re-fired within the same second")
+	}
+}
+
+func TestReloadAppliesNewSettings(t *testing.T) {
+	s, _ := newTestSeq(4)
+	s.reload = make(chan reloadParams, 1)
+	s.txPower = 30
+	s.followFreq = false
+	s.tracker.max = 5
+	oldChain := selector.Chain{fakeSelector{name: "Any"}}
+	s.chain = oldChain
+
+	newChain := selector.Chain{fakeSelector{name: "DXCC100"}}
+	s.Reload(config.FT8Ctrl{TXPower: 100, FollowFrequency: true, TXRetries: 3}, newChain)
+
+	// Nothing applied until the Run loop drains the channel.
+	if s.txPower != 30 {
+		t.Fatal("reload applied before applyReload")
+	}
+	s.applyReload()
+	if s.txPower != 100 {
+		t.Errorf("txPower = %d, want 100", s.txPower)
+	}
+	if !s.followFreq {
+		t.Error("followFreq not updated")
+	}
+	if s.tracker.max != 3 {
+		t.Errorf("tracker.max = %d, want 3", s.tracker.max)
+	}
+	if s.chain[0].Name() != "DXCC100" {
+		t.Errorf("chain not swapped: %q", s.chain[0].Name())
+	}
+}
+
+func TestReloadReplacesPending(t *testing.T) {
+	s, _ := newTestSeq(4)
+	s.reload = make(chan reloadParams, 1)
+	// Two reloads before any applyReload: the latest must win.
+	s.Reload(config.FT8Ctrl{TXPower: 50, TXRetries: 5}, nil)
+	s.Reload(config.FT8Ctrl{TXPower: 99, TXRetries: 2}, nil)
+	s.applyReload()
+	if s.txPower != 99 || s.tracker.max != 2 {
+		t.Errorf("latest reload did not win: txPower=%d max=%d", s.txPower, s.tracker.max)
+	}
+}
+
+func TestSequenceCheckSkipsWhileTransmitting(t *testing.T) {
+	s, _ := newTestSeq(4)
+	s.txStatus = true
+	s.sequence = map[int]bool{5: true}
+	s.chain = selector.Chain{fakeSelector{name: "Any"}}
+	orig := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 6, 18, 12, 0, 5, 0, time.UTC) }
+	defer func() { nowFunc = orig }()
+
+	s.sequenceCheck()
+	if s.current != "" {
+		t.Error("should not select a station while transmitting")
+	}
+}

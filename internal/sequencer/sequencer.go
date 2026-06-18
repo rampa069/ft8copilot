@@ -1,0 +1,347 @@
+// Package sequencer is the heart of the daemon: it listens to WSJT-X UDP
+// packets, records CQ-calling stations into the database, and automatically
+// replies to the station the selector chain judges most likely to complete a
+// QSO. Port of the Sequencer class in ft8ctrl.py.
+package sequencer
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net"
+	"time"
+
+	"github.com/rampamac/ft8copilot/internal/config"
+	"github.com/rampamac/ft8copilot/internal/db"
+	"github.com/rampamac/ft8copilot/internal/selector"
+	"github.com/rampamac/ft8copilot/internal/wsjtx"
+)
+
+// readTimeout bounds each UDP read so the transmit-sequence check runs roughly
+// every readTimeout even when no packets arrive (the select(...,.7) in the
+// original).
+const readTimeout = 700 * time.Millisecond
+
+// nowFunc is the clock, overridable in tests.
+var nowFunc = time.Now
+
+// Sequencer drives WSJT-X over UDP.
+type Sequencer struct {
+	conn       *net.UDPConn
+	mycall     string
+	followFreq bool
+	txPower    int
+	chain      selector.Chain
+	cmds       chan<- db.Command
+	log        *slog.Logger
+
+	loggerConn *net.UDPConn // optional secondary logger forward
+
+	// reload carries hot-reloaded settings from the SIGHUP handler. It is
+	// buffered (size 1) and drained at the top of each Run iteration, so the
+	// single-threaded Run loop is the only mutator of the fields above — no
+	// locking required.
+	reload chan reloadParams
+
+	// runtime state
+	peer       *net.UDPAddr
+	frequency  uint64
+	txStatus   bool
+	current    string // callsign we are currently trying to work
+	sequence   map[int]bool
+	tracker    txTracker
+	lastSecond int
+}
+
+// New creates a Sequencer, binding the WSJT-X UDP socket. cmds is the channel
+// consumed by the db.Writer; chain is the configured selector chain.
+func New(cfg config.FT8Ctrl, chain selector.Chain, cmds chan<- db.Command, log *slog.Logger) (*Sequencer, error) {
+	if log == nil {
+		log = slog.Default()
+	}
+	ip := net.ParseIP(cfg.WSJTIP)
+	if ip == nil {
+		// Allow hostnames too.
+		addrs, err := net.LookupIP(cfg.WSJTIP)
+		if err != nil || len(addrs) == 0 {
+			return nil, fmt.Errorf("sequencer: resolve wsjt_ip %q: %w", cfg.WSJTIP, err)
+		}
+		ip = addrs[0]
+	}
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: ip, Port: cfg.WSJTPort})
+	if err != nil {
+		return nil, fmt.Errorf("sequencer: bind %s:%d: %w", cfg.WSJTIP, cfg.WSJTPort, err)
+	}
+
+	s := &Sequencer{
+		conn:       conn,
+		mycall:     cfg.MyCall,
+		followFreq: cfg.FollowFrequency,
+		txPower:    cfg.TXPower,
+		chain:      chain,
+		cmds:       cmds,
+		log:        log,
+		reload:     make(chan reloadParams, 1),
+		sequence:   map[int]bool{},
+		tracker:    txTracker{max: cfg.TXRetries},
+		lastSecond: -1,
+	}
+
+	if cfg.LoggerIP != "" && cfg.LoggerPort != 0 {
+		laddr := &net.UDPAddr{IP: net.ParseIP(cfg.LoggerIP), Port: cfg.LoggerPort}
+		if lc, err := net.DialUDP("udp", nil, laddr); err == nil {
+			s.loggerConn = lc
+		} else {
+			log.Warn("secondary logger disabled", "err", err)
+		}
+	}
+	return s, nil
+}
+
+// reloadParams holds the subset of configuration that can be applied to a
+// running Sequencer without reopening sockets or the database.
+type reloadParams struct {
+	chain      selector.Chain
+	txPower    int
+	followFreq bool
+	txRetries  int
+}
+
+// Reload hands new hot-reloadable settings to the running Sequencer. It is
+// non-blocking: the values are picked up at the next Run iteration. A pending
+// reload that has not been consumed yet is replaced. Reload must be called from
+// a single goroutine (the SIGHUP handler).
+func (s *Sequencer) Reload(cfg config.FT8Ctrl, chain selector.Chain) {
+	p := reloadParams{
+		chain:      chain,
+		txPower:    cfg.TXPower,
+		followFreq: cfg.FollowFrequency,
+		txRetries:  cfg.TXRetries,
+	}
+	// Discard any unconsumed reload so we always apply the latest.
+	select {
+	case <-s.reload:
+	default:
+	}
+	s.reload <- p
+}
+
+// applyReload folds in a pending reload, if any. Called only from Run, so it is
+// the sole mutator of the affected fields.
+func (s *Sequencer) applyReload() {
+	select {
+	case p := <-s.reload:
+		s.chain = p.chain
+		s.txPower = p.txPower
+		s.followFreq = p.followFreq
+		s.tracker.max = p.txRetries
+		s.log.Info("sequencer reloaded", "tx_retries", p.txRetries,
+			"tx_power", p.txPower, "follow_frequency", p.followFreq)
+	default:
+	}
+}
+
+// Close releases the sockets.
+func (s *Sequencer) Close() error {
+	if s.loggerConn != nil {
+		s.loggerConn.Close()
+	}
+	return s.conn.Close()
+}
+
+// Run processes packets until the context is cancelled.
+func (s *Sequencer) Run(ctx context.Context) error {
+	s.log.Info("ft8ctrl running", "addr", s.conn.LocalAddr())
+	buf := make([]byte, 1024)
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		s.applyReload()
+		_ = s.conn.SetReadDeadline(nowFunc().Add(readTimeout))
+		n, addr, err := s.conn.ReadFromUDP(buf)
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				// No packet this tick; fall through to the sequence check.
+			} else if ctx.Err() != nil {
+				return ctx.Err()
+			} else {
+				s.log.Error("udp read", "err", err)
+			}
+		} else {
+			s.peer = addr
+			s.handlePacket(buf[:n])
+		}
+		s.sequenceCheck()
+	}
+}
+
+func (s *Sequencer) handlePacket(raw []byte) {
+	msg, err := wsjtx.Decode(raw)
+	if err != nil {
+		s.log.Debug("undecoded packet", "err", err)
+		return
+	}
+	switch p := msg.(type) {
+	case *wsjtx.Heartbeat, *wsjtx.ADIF:
+		// ignored
+	case *wsjtx.QSOLogged:
+		s.logCall(p)
+		s.current = ""
+	case *wsjtx.DecodeMsg:
+		s.handleDecode(p)
+	case *wsjtx.Status:
+		s.handleStatus(p)
+	default:
+		s.log.Debug("unhandled packet", "type", msg.Type())
+	}
+}
+
+func (s *Sequencer) handleDecode(p *wsjtx.DecodeMsg) {
+	m := parseMessage(p.Message)
+	band := db.Band(s.frequency)
+	switch m.kind {
+	case msgReply:
+		// The station we are working answered someone else: stop and forget it.
+		if m.call == s.current && m.to != s.mycall {
+			s.log.Info("stop transmit: station replying to someone else",
+				"call", m.call, "to", m.to)
+			s.stopTransmit()
+			s.send(db.DeleteCmd{Call: m.call, Band: band})
+		}
+	case msgCQ:
+		s.send(db.InsertCmd{Spot: db.Spot{
+			Call:      m.call,
+			Extra:     m.extra,
+			Grid:      m.grid,
+			Frequency: s.frequency,
+			Band:      band,
+			Packet: db.Packet{
+				New:            p.New,
+				Time:           p.Time,
+				SNR:            p.SNR,
+				DeltaTime:      p.DeltaTime,
+				DeltaFrequency: p.DeltaFrequency,
+				Mode:           string(p.Mode),
+				Message:        p.Message,
+				LowConfidence:  p.LowConfidence,
+				OffAir:         p.OffAir,
+			},
+		}})
+	}
+}
+
+func (s *Sequencer) handleStatus(p *wsjtx.Status) {
+	// WSJT-X may emit several Status packets with Transmitting=true for one
+	// transmission; gating on Decoding avoids inflating the retry count.
+	if s.tracker.observe(p.Decoding, p.Transmitting, p.TxMessage) {
+		s.log.Info("retries exceeded, stopping transmit")
+		s.stopTransmit()
+		return
+	}
+
+	if seq, ok := sequenceSeconds[p.TXMode]; ok {
+		s.sequence = seq
+	}
+	s.frequency = p.Frequency
+	s.txStatus = p.Transmitting || p.TXEnabled
+
+	if p.Transmitting && p.DXCall != "" {
+		s.send(db.StatusCmd{Call: p.DXCall, Band: db.Band(s.frequency), Status: 1})
+	}
+}
+
+// sequenceCheck calls the best available station at a sequence boundary, when we
+// are not already transmitting.
+func (s *Sequencer) sequenceCheck() {
+	if s.txStatus {
+		return
+	}
+	now := nowFunc().UTC()
+	sec := now.Second()
+	if !s.sequence[sec] {
+		return
+	}
+	// Avoid re-firing within the same second (the original slept 1s here).
+	if sec == s.lastSecond {
+		return
+	}
+	s.lastSecond = sec
+
+	sel, ok := s.chain.Select(db.Band(s.frequency))
+	if !ok {
+		s.current = ""
+		return
+	}
+	s.callStation(sel)
+	s.current = sel.Call
+	s.tracker.reset()
+}
+
+// callStation transmits a reply to the selected station.
+func (s *Sequencer) callStation(sel selector.Selection) {
+	if s.peer == nil {
+		return
+	}
+	s.log.Info("calling",
+		"call", sel.Call, "country", sel.Country, "snr", sel.SNR,
+		"distance", int(sel.Distance), "band", sel.Band, "selector", sel.Selector)
+
+	reply := &wsjtx.Reply{
+		Time:           sel.Time,
+		SNR:            sel.SNR,
+		DeltaTime:      sel.Packet.DeltaTime,
+		DeltaFrequency: sel.Packet.DeltaFrequency,
+		Mode:           wsjtx.Mode(sel.Packet.Mode),
+		Message:        sel.Packet.Message,
+	}
+	if s.followFreq {
+		reply.Modifiers = wsjtx.ShiftMod
+	}
+	if _, err := s.conn.WriteToUDP(reply.Encode(), s.peer); err != nil {
+		s.log.Error("transmit reply", "err", err)
+	}
+}
+
+// stopTransmit asks WSJT-X to halt transmission immediately.
+func (s *Sequencer) stopTransmit() {
+	if s.peer == nil {
+		return
+	}
+	if _, err := s.conn.WriteToUDP((&wsjtx.HaltTx{}).Encode(), s.peer); err != nil {
+		s.log.Error("halt tx", "err", err)
+	}
+}
+
+// logCall records a logged QSO: forwards it to the optional secondary logger and
+// marks the station worked in the database.
+func (s *Sequencer) logCall(p *wsjtx.QSOLogged) {
+	s.forwardToLogger(p)
+	s.send(db.StatusCmd{Call: p.DXCall, Band: db.Band(p.DialFrequency), Status: 2})
+	s.log.Info("logged call", "call", p.DXCall, "grid", p.DXGrid, "mode", p.Mode)
+}
+
+// forwardToLogger re-sends a logged QSO to a secondary logging application,
+// stamping TX power and tagging the comment. Port of sendto_log in ft8ctrl.py.
+func (s *Sequencer) forwardToLogger(p *wsjtx.QSOLogged) {
+	if s.loggerConn == nil {
+		return
+	}
+	logged := *p
+	if s.txPower != 0 {
+		logged.TXPower = fmt.Sprintf("%d", s.txPower)
+	}
+	logged.Comments = "[ft8ctrl] " + p.Comments
+	if _, err := s.loggerConn.Write(logged.Encode()); err != nil {
+		s.log.Error("forward to logger", "err", err)
+	}
+}
+
+func (s *Sequencer) send(cmd db.Command) {
+	select {
+	case s.cmds <- cmd:
+	default:
+		// Drop rather than block the UDP loop if the writer is backed up.
+		s.log.Warn("db command channel full, dropping", "type", fmt.Sprintf("%T", cmd))
+	}
+}

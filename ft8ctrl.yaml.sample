@@ -1,0 +1,102 @@
+---
+#
+# WSJT-X FT8 Automation
+# /!\ The content of this file is case sensitive
+#
+
+ft8ctrl:
+  my_call: -- CALL_SIGN --
+  my_grid: -- GRID --
+  db_name: ~/ft8ctl.sql
+  wsjt_ip: 127.0.0.1
+  wsjt_port: 2238
+  follow_frequency: False
+  retry_time: 15                 # In minutes
+  tx_power: 30
+  # tx_retries determines how many times to attempt the same message before stopping transmission
+  tx_retries: 5
+  # Specify which call_selector you want to use, then check the plugin configuration
+  # The selector 'Any' accept any callsigns.
+  call_selector:
+    - Any
+
+BlackList:
+  - KC5TT
+  - KD7DPS
+  - VA7QI
+  - W5JDC
+  - W6IPA
+
+#
+# Selectors plugins configuration.
+#
+# Use "reverse: True" for "not" in the list
+# All the plugins can use the following options:
+# min_snr, max_snr
+# lotw_users_only # will only work stations that are registered LOTW users.
+
+Any:
+  min_snr: -18
+  max_snr: 3
+  lotw_users_only: True
+
+Grid:
+  regexp: ^[EF][NM].*
+
+CallSign:
+  reverse: False
+  # regexp: ^CO8LY
+  regexp: ^[WKN](\w|)\d\w+
+
+#
+# Use "Reverse: True" for not in the list
+#
+CQZone:
+  reverse: False
+  list:
+    - 14
+    - 11
+    - 8
+    - 4
+    - 9
+
+ITUZone:
+  reverse: True
+  list:
+    - 14
+    - 11
+    - 8
+    - 4
+    - 9
+
+Country:
+  min_snr: -21
+  reverse: True
+  list:
+    - Asiatic Russia
+    - European Russia
+    - Canada
+    - Mexico
+    - United States
+
+Continent:
+  min_snr: -17
+  lotw_users_only: True
+  list:
+    - EU
+    - OC
+    - AS
+
+DXCC100:
+  min_snr: -21
+  worked_count: 4
+  lotw_users_only: False
+
+Extra:
+  min_snr: 1
+  list:
+    - POTA
+    - NA
+    - US
+    - USA
+    - QRP
