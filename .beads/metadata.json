@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "FT8CoPilot",
+  "project_id": "945d4e16-f18d-4312-b6f7-cc28ae2df163"
+}
