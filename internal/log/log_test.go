@@ -1,12 +1,69 @@
 package log
 
 import (
+	"bytes"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestConsoleHandlerPlain(t *testing.T) {
+	var buf bytes.Buffer
+	l := slog.New(newConsoleHandler(&buf, slog.LevelInfo, false))
+	l.Info("calling", "call", "EA5IUE", "band", 20, "country", "Spain")
+	out := buf.String()
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("plain output must not contain ANSI: %q", out)
+	}
+	for _, want := range []string{"INFO ", "calling", "call=EA5IUE", "band=20", "country=Spain"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output %q missing %q", out, want)
+		}
+	}
+}
+
+func TestConsoleHandlerColor(t *testing.T) {
+	var buf bytes.Buffer
+	l := slog.New(newConsoleHandler(&buf, slog.LevelInfo, true))
+	l.Warn("retries exceeded", "call", "EA5IUE")
+	out := buf.String()
+	if !strings.Contains(out, ansiYellow) {
+		t.Errorf("WARN should be yellow: %q", out)
+	}
+	if !strings.Contains(out, ansiBoldCyan) {
+		t.Errorf("call value should be highlighted: %q", out)
+	}
+	if !strings.Contains(out, ansiReset) {
+		t.Errorf("colour codes must be reset: %q", out)
+	}
+}
+
+func TestConsoleHandlerQuotesSpaces(t *testing.T) {
+	var buf bytes.Buffer
+	slog.New(newConsoleHandler(&buf, slog.LevelInfo, false)).
+		Info("reload", "field", "wsjt_ip", "was", "Asiatic Russia")
+	if !strings.Contains(buf.String(), `was="Asiatic Russia"`) {
+		t.Errorf("value with spaces not quoted: %q", buf.String())
+	}
+}
+
+func TestUseColor(t *testing.T) {
+	t.Setenv("FT8_COLOR", "always")
+	t.Setenv("NO_COLOR", "1")
+	if !useColor(os.Stderr) {
+		t.Error("FT8_COLOR=always must force colour even with NO_COLOR set")
+	}
+	t.Setenv("FT8_COLOR", "never")
+	if useColor(os.Stderr) {
+		t.Error("FT8_COLOR=never must disable colour")
+	}
+	t.Setenv("FT8_COLOR", "")
+	if useColor(os.Stderr) {
+		t.Error("NO_COLOR must disable colour when FT8_COLOR is unset")
+	}
+}
 
 func TestParseLevel(t *testing.T) {
 	cases := map[string]slog.Level{

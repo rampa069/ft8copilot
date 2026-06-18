@@ -88,6 +88,11 @@ The config file is searched in `/etc`, `~/.local/etc`, and `.` (in that order)
 when `-c` is omitted. Set `LOG_LEVEL=DEBUG` for verbose console output; a rotating
 debug log is always written to `logfile_name` (default `ft8ctrl-debug.log`).
 
+The console output is colourised by level (and key fields like `call` are
+highlighted) when stderr is a terminal. Colour is disabled automatically when the
+output is redirected to a file or pipe, or when `NO_COLOR` is set; force it either
+way with `FT8_COLOR=always|never`. The rotating debug log is always plain text.
+
 ### `lookup` — database viewer
 
 ```sh
