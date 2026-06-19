@@ -47,7 +47,7 @@ make release    # static binaries for linux/amd64, linux/arm64, darwin/arm64
 Or install a single command directly:
 
 ```sh
-go install github.com/rampamac/ft8copilot/cmd/ft8ctrl@latest
+go install github.com/rampa069/ft8copilot/cmd/ft8ctrl@latest
 ```
 
 ## Usage

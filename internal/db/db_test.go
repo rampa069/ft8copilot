@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/dxcc"
+	"github.com/rampa069/ft8copilot/internal/dxcc"
 )
 
 func TestBand(t *testing.T) {

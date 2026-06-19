@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/db"
 )
 
 // This file ports the nine concrete call-selector plugins from

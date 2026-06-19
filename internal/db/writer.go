@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/dxcc"
-	"github.com/rampamac/ft8copilot/internal/geo"
+	"github.com/rampa069/ft8copilot/internal/dxcc"
+	"github.com/rampa069/ft8copilot/internal/geo"
 )
 
 // Spot is the raw payload of an Insert command: a station heard calling CQ,

@@ -6,9 +6,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/selector"
-	"github.com/rampamac/ft8copilot/internal/sequencer"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/sequencer"
 )
 
 func ranked(call, country string, snr int32, chosen, eligible bool) selector.Ranked {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rampamac/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/selector"
 )
 
 // candidates.go implements the F5 full-screen ranked candidates view: the whole

@@ -7,8 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/selector"
 )
 
 func rankedFull(call, country string, snr int32, chosen, eligible bool, reason string) selector.Ranked {

@@ -25,9 +25,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/lotw"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/lotw"
 )
 
 // runTime is the default window (seconds) for the --run view, matching

@@ -1,4 +1,4 @@
-module github.com/rampamac/ft8copilot
+module github.com/rampa069/ft8copilot
 
 go 1.26.3
 

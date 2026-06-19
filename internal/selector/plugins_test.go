@@ -9,10 +9,10 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/rampamac/ft8copilot/internal/blacklist"
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/dxcc"
+	"github.com/rampa069/ft8copilot/internal/blacklist"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/dxcc"
 )
 
 // pluginHarness is like the selector_test.go harness but also remembers the

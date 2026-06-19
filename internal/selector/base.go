@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/blacklist"
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/blacklist"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/db"
 )
 
 // Defaults mirroring plugins/base.py.

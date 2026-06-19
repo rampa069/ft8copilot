@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/sequencer"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/sequencer"
 )
 
 // newTestSeq builds a real sequencer bound to an ephemeral UDP port (so it has a

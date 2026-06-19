@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rampamac/ft8copilot/internal/selector"
-	"github.com/rampamac/ft8copilot/internal/sequencer"
+	"github.com/rampa069/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/sequencer"
 )
 
 // panes.go renders the body panes: the ranked candidates table and the status

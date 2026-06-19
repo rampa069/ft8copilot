@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/selector"
-	"github.com/rampamac/ft8copilot/internal/wsjtx"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/wsjtx"
 )
 
 func TestParseMessage(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/selector"
 )
 
 // stubSelector records how many times the chain was consulted and returns a

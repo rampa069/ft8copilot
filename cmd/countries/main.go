@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rampamac/ft8copilot/internal/dxcc"
+	"github.com/rampa069/ft8copilot/internal/dxcc"
 )
 
 func main() {

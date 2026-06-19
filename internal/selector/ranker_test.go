@@ -3,7 +3,7 @@ package selector
 import (
 	"testing"
 
-	"github.com/rampamac/ft8copilot/internal/blacklist"
+	"github.com/rampa069/ft8copilot/internal/blacklist"
 )
 
 func newRankerForTest(h *harness, deps Deps) *Ranker {

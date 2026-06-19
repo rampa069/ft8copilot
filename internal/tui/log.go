@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	applog "github.com/rampamac/ft8copilot/internal/log"
+	applog "github.com/rampa069/ft8copilot/internal/log"
 )
 
 // logMsg delivers one new log entry from the sink subscription to the model.

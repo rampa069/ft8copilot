@@ -18,16 +18,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/blacklist"
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/control"
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/dxcc"
-	applog "github.com/rampamac/ft8copilot/internal/log"
-	"github.com/rampamac/ft8copilot/internal/lotw"
-	"github.com/rampamac/ft8copilot/internal/selector"
-	"github.com/rampamac/ft8copilot/internal/sequencer"
-	"github.com/rampamac/ft8copilot/internal/tui"
+	"github.com/rampa069/ft8copilot/internal/blacklist"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/control"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/dxcc"
+	applog "github.com/rampa069/ft8copilot/internal/log"
+	"github.com/rampa069/ft8copilot/internal/lotw"
+	"github.com/rampa069/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/sequencer"
+	"github.com/rampa069/ft8copilot/internal/tui"
 )
 
 // defaultLogfile mirrors LOGFILE_NAME in ft8ctrl.py.

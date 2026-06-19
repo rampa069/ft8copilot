@@ -7,9 +7,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	applog "github.com/rampamac/ft8copilot/internal/log"
-	"github.com/rampamac/ft8copilot/internal/selector"
-	"github.com/rampamac/ft8copilot/internal/sequencer"
+	applog "github.com/rampa069/ft8copilot/internal/log"
+	"github.com/rampa069/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/sequencer"
 )
 
 // refreshInterval is how often the candidate table and status panel re-query.

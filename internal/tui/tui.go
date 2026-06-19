@@ -15,11 +15,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/rampamac/ft8copilot/internal/control"
-	"github.com/rampamac/ft8copilot/internal/db"
-	applog "github.com/rampamac/ft8copilot/internal/log"
-	"github.com/rampamac/ft8copilot/internal/selector"
-	"github.com/rampamac/ft8copilot/internal/sequencer"
+	"github.com/rampa069/ft8copilot/internal/control"
+	"github.com/rampa069/ft8copilot/internal/db"
+	applog "github.com/rampa069/ft8copilot/internal/log"
+	"github.com/rampa069/ft8copilot/internal/selector"
+	"github.com/rampa069/ft8copilot/internal/sequencer"
 )
 
 // Deps are the live daemon components the TUI reads from and controls. The

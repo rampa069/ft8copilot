@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/db"
 )
 
 func TestRenderTable(t *testing.T) {

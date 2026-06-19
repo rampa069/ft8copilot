@@ -9,9 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/rampamac/ft8copilot/internal/config"
-	"github.com/rampamac/ft8copilot/internal/control"
-	"github.com/rampamac/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/control"
+	"github.com/rampa069/ft8copilot/internal/db"
 )
 
 func testController(t *testing.T) *control.Controller {

@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	applog "github.com/rampamac/ft8copilot/internal/log"
+	applog "github.com/rampa069/ft8copilot/internal/log"
 )
 
 func rec(level slog.Level, msg string) slog.Record {

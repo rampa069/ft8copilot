@@ -3,7 +3,7 @@ package selector
 import (
 	"sort"
 
-	"github.com/rampamac/ft8copilot/internal/config"
+	"github.com/rampa069/ft8copilot/internal/config"
 )
 
 // ranker.go provides the candidate-ranking API used by the TUI's "candidates in

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rampamac/ft8copilot/internal/adif"
-	"github.com/rampamac/ft8copilot/internal/db"
-	"github.com/rampamac/ft8copilot/internal/dxcc"
+	"github.com/rampa069/ft8copilot/internal/adif"
+	"github.com/rampa069/ft8copilot/internal/db"
+	"github.com/rampa069/ft8copilot/internal/dxcc"
 )
 
 func TestRecordToADIF(t *testing.T) {
