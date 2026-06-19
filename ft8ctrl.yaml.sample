@@ -11,7 +11,9 @@ ft8ctrl:
   # calling "CQ DX" from your own continent. Auto-derived from my_call when
   # omitted, so you normally don't need to set it.
   # my_continent: EU
-  db_name: ~/ft8ctl.sql
+  # Path to the SQLite call database. A bare name keeps it in the current
+  # directory; use an absolute path (~ is expanded) to store it elsewhere.
+  db_name: ft8ctrl.sql
   wsjt_ip: 127.0.0.1
   wsjt_port: 2238
   follow_frequency: False
