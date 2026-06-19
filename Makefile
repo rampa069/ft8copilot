@@ -6,7 +6,7 @@ LDFLAGS := -s -w
 
 # Target platforms for `make release`. Pure-Go (CGO disabled) so every binary is
 # statically linked and needs no SQLite system library.
-PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 darwin/amd64
+PLATFORMS := linux/amd64 linux/arm64 darwin/arm64 darwin/amd64 windows/amd64 windows/arm64
 
 .PHONY: all build test lint vet fmt tidy clean release $(CMDS)
 
@@ -37,8 +37,9 @@ release:
 	@mkdir -p $(DISTDIR)
 	@for platform in $(PLATFORMS); do \
 		os=$${platform%/*}; arch=$${platform#*/}; \
+		ext=; [ "$$os" = windows ] && ext=.exe; \
 		for cmd in $(CMDS); do \
-			out=$(DISTDIR)/$$cmd-$$os-$$arch; \
+			out=$(DISTDIR)/$$cmd-$$os-$$arch$$ext; \
 			echo "building $$out"; \
 			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
 				go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $$out ./cmd/$$cmd || exit 1; \

@@ -11,8 +11,8 @@ SNR, distance, and a configurable chain of selector plugins — and automaticall
 replies to the one with the best chance of completing the QSO. It is meant for
 contesting and DX hunting, where you want to make as many QSOs as possible.
 
-Runs on macOS and Linux. The three commands are statically linked, pure-Go
-binaries (no cgo, no SQLite system library required).
+Runs on macOS, Linux and Windows. All four commands are statically linked,
+pure-Go binaries (no cgo, no SQLite system library required).
 
 ## How it works
 
@@ -41,7 +41,7 @@ Requires Go 1.26+.
 make build      # builds bin/ft8ctrl, bin/lookup, bin/countries
 make test       # run the unit + integration tests
 make lint       # golangci-lint (optional)
-make release    # static binaries for linux/{amd64,arm64}, darwin/{amd64,arm64} -> dist/
+make release    # static binaries for linux/darwin/windows ({amd64,arm64}) -> dist/
 ```
 
 Or install a single command directly:
