@@ -54,13 +54,14 @@ type Sequencer struct {
 	paused atomic.Bool
 
 	// runtime state
-	peer       *net.UDPAddr
-	frequency  uint64
-	txStatus   bool
-	current    string // callsign we are currently trying to work
-	sequence   map[int]bool
-	tracker    txTracker
-	lastSecond int
+	peer        *net.UDPAddr
+	frequency   uint64
+	txStatus    bool
+	current     string // callsign we are currently trying to work
+	sequence    map[int]bool
+	tracker     txTracker
+	lastSecond  int
+	sessionQSOs int // QSOs logged since startup (Run loop owns it, like current)
 
 	// status is a snapshot the Run loop publishes for other goroutines (the TUI)
 	// to read without locking the runtime fields above.
@@ -74,6 +75,7 @@ type Status struct {
 	Transmitting bool   // currently keying the transmitter
 	Paused       bool   // autopilot suspended
 	Current      string // callsign being worked, empty when idle
+	SessionQSOs  int    // QSOs logged since startup
 }
 
 // Status returns the most recent published snapshot (zero value before the Run
@@ -112,6 +114,7 @@ func (s *Sequencer) publishStatus() {
 		Transmitting: s.txStatus,
 		Paused:       s.paused.Load(),
 		Current:      s.current,
+		SessionQSOs:  s.sessionQSOs,
 	})
 }
 
@@ -444,7 +447,9 @@ func (s *Sequencer) stopTransmit() {
 func (s *Sequencer) logCall(p *wsjtx.QSOLogged) {
 	s.forwardToLogger(p)
 	s.send(db.StatusCmd{Call: p.DXCall, Band: db.Band(p.DialFrequency), Status: 2})
-	s.log.Info("logged call", "call", p.DXCall, "grid", p.DXGrid, "mode", p.Mode)
+	s.sessionQSOs++
+	s.log.Info("logged call", "call", p.DXCall, "grid", p.DXGrid, "mode", p.Mode,
+		"session_qsos", s.sessionQSOs)
 }
 
 // forwardToLogger re-sends a logged QSO to a secondary logging application,

@@ -220,6 +220,24 @@ func TestHandleDecodeRR73FromCurrentStops(t *testing.T) {
 	}
 }
 
+func TestLogCallCountsSessionQSOs(t *testing.T) {
+	s, ch := newTestSeq(4)
+	for i := 1; i <= 2; i++ {
+		s.logCall(&wsjtx.QSOLogged{DXCall: "CO8LY", DialFrequency: 14074000, Mode: "FT8"})
+		if _, ok := (<-ch).(db.StatusCmd); !ok {
+			t.Fatalf("logCall %d: expected a StatusCmd", i)
+		}
+		if s.sessionQSOs != i {
+			t.Errorf("after %d QSOs, sessionQSOs = %d", i, s.sessionQSOs)
+		}
+	}
+	// The count is surfaced through the published Status snapshot.
+	s.publishStatus()
+	if got := s.Status().SessionQSOs; got != 2 {
+		t.Errorf("Status().SessionQSOs = %d, want 2", got)
+	}
+}
+
 func TestHandleStatusUpdatesState(t *testing.T) {
 	s, ch := newTestSeq(4)
 	s.handleStatus(&wsjtx.Status{

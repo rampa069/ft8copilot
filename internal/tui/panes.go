@@ -152,6 +152,7 @@ func renderStatus(st sequencer.Status, ranked []selector.Ranked, myCall string, 
 		{"Freq", stStatVal.Render(freq)},
 		{"TX", tx},
 		{"Working", stStatVal.Render(working)},
+		{"QSOs", stStatVal.Render(fmt.Sprintf("%d", st.SessionQSOs))},
 		{"Spots", stStatVal.Render(fmt.Sprintf("%d (%d ok)", len(ranked), eligible))},
 	}
 
