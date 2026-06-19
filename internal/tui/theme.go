@@ -177,18 +177,23 @@ func fit(s string, w int) string {
 // background so the panel appears to lift off the screen.
 func shadow(block string) string {
 	sh := lipgloss.NewStyle().Background(colShadow)
+	ds := lipgloss.NewStyle().Background(colDesktop)
 	lines := strings.Split(block, "\n")
 	w := lipgloss.Width(block)
 	out := make([]string, 0, len(lines)+1)
 	for i, ln := range lines {
 		if i == 0 {
-			out = append(out, ln) // top row casts no shadow above itself
+			// The top-right corner casts no shadow, but the cell must still be
+			// padded (with the desktop background, so it stays invisible) to keep
+			// every line the same width — otherwise centre-alignment splits the
+			// padding unevenly and the top border drifts one cell to the side.
+			out = append(out, ln+ds.Render(" "))
 			continue
 		}
 		out = append(out, ln+sh.Render(" "))
 	}
 	// Bottom shadow row, offset one cell to the right.
-	out = append(out, " "+sh.Render(strings.Repeat(" ", w)))
+	out = append(out, ds.Render(" ")+sh.Render(strings.Repeat(" ", w)))
 	return strings.Join(out, "\n")
 }
 
