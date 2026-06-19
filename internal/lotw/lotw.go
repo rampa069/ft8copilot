@@ -110,7 +110,7 @@ func (c *Cache) rebuild() error {
 	if err != nil {
 		return fmt.Errorf("lotw: download: %w", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	cutoff := c.now().Add(-c.lastSeen)
 	users, err := parseActivity(rc, cutoff)
@@ -183,7 +183,7 @@ func readCacheFile(path string) (map[string]struct{}, time.Time, error) {
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var cf cacheFile
 	if err := gob.NewDecoder(f).Decode(&cf); err != nil {
@@ -208,7 +208,7 @@ func writeCacheFile(path string, users map[string]struct{}, stamp time.Time) err
 		return err
 	}
 	if err := gob.NewEncoder(f).Encode(cf); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	return f.Close()
@@ -232,7 +232,7 @@ func defaultFetch(url string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("download error: status %d", resp.StatusCode)
 	}
 	return resp.Body, nil

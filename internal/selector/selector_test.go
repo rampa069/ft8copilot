@@ -117,16 +117,16 @@ func TestSelectRecordSNRBounds(t *testing.T) {
 	h.insert(t, "CO8LY", "", -10)
 	h.insert(t, "G3XYZ", "", 5)
 
-	min, max := -8, 0
-	cfg := config.SelectorConfig{MinSNR: &min, MaxSNR: &max}
+	minSNR, maxSNR := -8, 0
+	cfg := config.SelectorConfig{MinSNR: &minSNR, MaxSNR: &maxSNR}
 	sel := newAny(h, "Any", cfg, Deps{})
-	// G3XYZ (5) is above max; CO8LY (-10) is below min -> nothing passes.
+	// G3XYZ (5) is above maxSNR; CO8LY (-10) is below minSNR -> nothing passes.
 	if _, ok := sel.Get(20); ok {
 		t.Fatal("expected no selection within bounds (-8,0)")
 	}
 
-	min2 := -12
-	cfg2 := config.SelectorConfig{MinSNR: &min2, MaxSNR: &max}
+	minSNR2 := -12
+	cfg2 := config.SelectorConfig{MinSNR: &minSNR2, MaxSNR: &maxSNR}
 	sel2 := newAny(h, "Any", cfg2, Deps{})
 	got, ok := sel2.Get(20)
 	if !ok || got.Call != "CO8LY" {
@@ -196,8 +196,8 @@ func TestChainSelect(t *testing.T) {
 	h.insert(t, "CO8LY", "", -10)
 
 	// First selector rejects everything (impossible SNR window); second accepts.
-	max := -100
-	reject := newAny(h, "Reject", config.SelectorConfig{MaxSNR: &max}, Deps{})
+	maxSNR := -100
+	reject := newAny(h, "Reject", config.SelectorConfig{MaxSNR: &maxSNR}, Deps{})
 	accept := newAny(h, "Accept", config.SelectorConfig{}, Deps{})
 
 	chain := Chain{reject, accept}

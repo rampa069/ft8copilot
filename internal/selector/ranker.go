@@ -77,7 +77,7 @@ func (r *Ranker) Rank(band int) []Ranked {
 // blacklist, then LOTW membership.
 func (r *Ranker) eligibility(c Candidate) (bool, string) {
 	snr := int(c.SNR)
-	if !(r.minSNR < snr && snr < r.maxSNR) {
+	if r.minSNR >= snr || snr >= r.maxSNR {
 		return false, ReasonSNR
 	}
 	if r.blacklist.Contains(c.Call) {

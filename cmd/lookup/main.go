@@ -61,20 +61,20 @@ func main() {
 func run(args []string) error {
 	fs := flag.NewFlagSet("lookup", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: lookup [-C config] <action> [-b band]\n\n")
-		fmt.Fprintf(fs.Output(), "Exactly one action is required:\n")
-		fmt.Fprintf(fs.Output(), "  -d, --delete CALL    delete a record (requires -b/--band)\n")
-		fmt.Fprintf(fs.Output(), "  -r, --run            refreshing view of recent rows (see --interval)\n")
-		fmt.Fprintf(fs.Output(), "  -c, --call CALL      find rows whose call matches the regexp CALL\n")
-		fmt.Fprintf(fs.Output(), "      --country NAME   find rows for a country\n")
-		fmt.Fprintf(fs.Output(), "      --status N       find rows with status N\n\n")
-		fmt.Fprintf(fs.Output(), "Options:\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Usage: lookup [-C config] <action> [-b band]\n\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Exactly one action is required:\n")
+		_, _ = fmt.Fprintf(fs.Output(), "  -d, --delete CALL    delete a record (requires -b/--band)\n")
+		_, _ = fmt.Fprintf(fs.Output(), "  -r, --run            refreshing view of recent rows (see --interval)\n")
+		_, _ = fmt.Fprintf(fs.Output(), "  -c, --call CALL      find rows whose call matches the regexp CALL\n")
+		_, _ = fmt.Fprintf(fs.Output(), "      --country NAME   find rows for a country\n")
+		_, _ = fmt.Fprintf(fs.Output(), "      --status N       find rows with status N\n\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Options:\n")
 		fs.PrintDefaults()
 	}
 
 	var (
 		configPath string
-		delete_    string
+		deleteCall string
 		runView    bool
 		interval   int
 		call       string
@@ -87,8 +87,8 @@ func run(args []string) error {
 
 	fs.StringVar(&configPath, "C", "", "configuration file (default: search standard locations)")
 	fs.StringVar(&configPath, "config", "", "configuration file (default: search standard locations)")
-	fs.StringVar(&delete_, "d", "", "delete entry for CALL (requires -b/--band)")
-	fs.StringVar(&delete_, "delete", "", "delete entry for CALL (requires -b/--band)")
+	fs.StringVar(&deleteCall, "d", "", "delete entry for CALL (requires -b/--band)")
+	fs.StringVar(&deleteCall, "delete", "", "delete entry for CALL (requires -b/--band)")
 	fs.BoolVar(&runView, "r", false, "run continuously, refreshing the recent-rows view")
 	fs.BoolVar(&runView, "run", false, "run continuously, refreshing the recent-rows view")
 	fs.IntVar(&interval, "interval", runTime, "window in seconds for --run")
@@ -114,12 +114,12 @@ func run(args []string) error {
 		}
 	})
 
-	delete_ = strings.ToUpper(delete_)
+	deleteCall = strings.ToUpper(deleteCall)
 	call = strings.ToUpper(call)
 
 	// Enforce exactly one action.
 	var actions []string
-	if delete_ != "" {
+	if deleteCall != "" {
 		actions = append(actions, "delete")
 	}
 	if runView {
@@ -148,7 +148,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	var bandPtr *int
 	if bandSet {
@@ -161,10 +161,10 @@ func run(args []string) error {
 			fmt.Println("Argument --band is missing")
 			return nil
 		}
-		return deleteRecord(store, delete_, band)
+		return deleteRecord(store, deleteCall, band)
 	case "run":
 		lk := loadLOTW()
-		return runView_(store, lk, time.Duration(interval)*time.Second)
+		return runViewLoop(store, lk, time.Duration(interval)*time.Second)
 	case "call":
 		return findByCall(store, call, bandPtr)
 	case "country":
@@ -237,17 +237,17 @@ func findByCall(store *db.Store, expr string, band *int) error {
 	return printRecords(os.Stdout, matched, loadLOTW())
 }
 
-// runView_ clears the screen and prints the rows seen within the last delta,
+// runViewLoop clears the screen and prints the rows seen within the last delta,
 // refreshing every refreshInterval, until interrupted.
-func runView_(store *db.Store, lk lotwLookup, delta time.Duration) error {
-	clear()
+func runViewLoop(store *db.Store, lk lotwLookup, delta time.Duration) error {
+	clearScreen()
 	for {
 		recs, err := store.Since(delta)
 		if err != nil {
 			return err
 		}
 		if len(recs) > 0 {
-			clear()
+			clearScreen()
 			if err := printRecords(os.Stdout, recs, lk); err != nil {
 				return err
 			}
@@ -257,8 +257,8 @@ func runView_(store *db.Store, lk lotwLookup, delta time.Duration) error {
 	}
 }
 
-// clear clears the terminal on posix systems.
-func clear() {
+// clearScreen clears the terminal on posix systems.
+func clearScreen() {
 	if isPosix() {
 		fmt.Print("\033[H\033[2J")
 	}

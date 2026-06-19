@@ -21,25 +21,25 @@ const defaultLogBufferLines = 1000
 // snapshot, appends live entries from the subscription, and renders the tail.
 // It is embedded by the root model and placed in a panel by the layout task.
 type logView struct {
-	ch      <-chan applog.Entry
-	cancel  func()
-	entries []applog.Entry
-	max     int
+	ch       <-chan applog.Entry
+	cancel   func()
+	entries  []applog.Entry
+	maxLines int
 }
 
 // newLogView subscribes to the sink and seeds the buffer with recent history. A
 // nil sink yields an inert view (no channel, empty render).
-func newLogView(sink *applog.Sink, max int) logView {
-	if max <= 0 {
-		max = defaultLogBufferLines
+func newLogView(sink *applog.Sink, maxLines int) logView {
+	if maxLines <= 0 {
+		maxLines = defaultLogBufferLines
 	}
-	lv := logView{max: max}
+	lv := logView{maxLines: maxLines}
 	if sink == nil {
 		return lv
 	}
 	lv.entries = sink.Snapshot()
-	if len(lv.entries) > max {
-		lv.entries = append([]applog.Entry(nil), lv.entries[len(lv.entries)-max:]...)
+	if len(lv.entries) > maxLines {
+		lv.entries = append([]applog.Entry(nil), lv.entries[len(lv.entries)-maxLines:]...)
 	}
 	lv.ch, lv.cancel = sink.Subscribe()
 	return lv
@@ -65,8 +65,8 @@ func (l logView) listen() tea.Cmd {
 // add appends an entry, trimming to the buffer cap.
 func (l *logView) add(e applog.Entry) {
 	l.entries = append(l.entries, e)
-	if len(l.entries) > l.max {
-		l.entries = l.entries[len(l.entries)-l.max:]
+	if len(l.entries) > l.maxLines {
+		l.entries = l.entries[len(l.entries)-l.maxLines:]
 	}
 }
 

@@ -188,7 +188,7 @@ func (s *Sequencer) applyReload() {
 // Close releases the sockets.
 func (s *Sequencer) Close() error {
 	if s.loggerConn != nil {
-		s.loggerConn.Close()
+		_ = s.loggerConn.Close()
 	}
 	return s.conn.Close()
 }
@@ -205,11 +205,15 @@ func (s *Sequencer) Run(ctx context.Context) error {
 		_ = s.conn.SetReadDeadline(nowFunc().Add(readTimeout))
 		n, addr, err := s.conn.ReadFromUDP(buf)
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				// No packet this tick; fall through to the sequence check.
-			} else if ctx.Err() != nil {
-				return ctx.Err()
-			} else {
+			ne, ok := err.(net.Error)
+			isTimeout := ok && ne.Timeout()
+			// On timeout there is simply no packet this tick; fall through to
+			// the sequence check. Other errors are fatal if the context is
+			// cancelled, otherwise logged and retried.
+			if !isTimeout {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				s.log.Error("udp read", "err", err)
 			}
 		} else {

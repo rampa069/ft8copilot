@@ -141,7 +141,7 @@ func (b *Base) SelectRecord(records []Candidate) (Candidate, bool) {
 	})
 	for _, rec := range sorted {
 		snr := int(rec.SNR)
-		if !(b.minSNR < snr && snr < b.maxSNR) {
+		if b.minSNR >= snr || snr >= b.maxSNR {
 			continue
 		}
 		if b.blacklist.Contains(rec.Call) {

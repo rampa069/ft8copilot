@@ -35,7 +35,7 @@ func runExport(configPath string, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	q := db.Query{}
 	if *band != 0 {
@@ -60,7 +60,7 @@ func runExport(configPath string, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		out = f
 	}
 

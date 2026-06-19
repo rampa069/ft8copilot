@@ -87,7 +87,7 @@ func runImport(configPath string, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	stats := newStats()
 	if *dryRun {
@@ -98,7 +98,7 @@ func runImport(configPath string, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	entities, err := dxcc.New()
 	if err != nil {

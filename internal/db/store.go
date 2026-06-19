@@ -86,12 +86,12 @@ func Open(path string) (*Store, error) {
 		"PRAGMA synchronous=NORMAL;",
 	} {
 		if _, err := conn.Exec(pragma); err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, fmt.Errorf("db: %s: %w", pragma, err)
 		}
 	}
 	if _, err := conn.Exec(schema); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("db: create schema: %w", err)
 	}
 	return &Store{db: conn}, nil
@@ -123,7 +123,7 @@ func (s *Store) Recent(band int, since time.Time) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanRecords(rows)
 }
 
@@ -136,7 +136,7 @@ func (s *Store) WorkedCountries(band, minCount int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var c string
@@ -172,7 +172,7 @@ func (s *Store) FindByStatus(status int, band *int) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanRecords(rows)
 }
 
@@ -190,7 +190,7 @@ func (s *Store) FindByCountry(country string, band *int) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanRecords(rows)
 }
 
@@ -209,7 +209,7 @@ func (s *Store) All(band *int) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanRecords(rows)
 }
 
@@ -223,7 +223,7 @@ func (s *Store) Since(d time.Duration) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanRecords(rows)
 }
 
@@ -267,7 +267,7 @@ func (s *Store) Search(q Query) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanRecords(rows)
 }
 

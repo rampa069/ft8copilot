@@ -85,6 +85,7 @@ func Decode(raw []byte) (Message, error) {
 
 // ---- Heartbeat (type 0) ----
 
+// Heartbeat is the keep-alive packet exchanged between WSJT-X and clients.
 type Heartbeat struct {
 	Header
 	MaxSchema uint32
@@ -92,6 +93,7 @@ type Heartbeat struct {
 	Revision  string
 }
 
+// Type returns the packet type.
 func (*Heartbeat) Type() PacketType { return TypeHeartbeat }
 
 // NewHeartbeat returns a Heartbeat populated with this client's defaults.
@@ -108,6 +110,7 @@ func decodeHeartbeat(r *reader, h Header) *Heartbeat {
 	}
 }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *Heartbeat) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID
@@ -123,6 +126,7 @@ func (p *Heartbeat) Encode() []byte {
 
 // ---- Status (type 1) ----
 
+// Status reports WSJT-X's current operating state (frequency, mode, calls, etc.).
 type Status struct {
 	Header
 	Frequency     uint64
@@ -148,6 +152,7 @@ type Status struct {
 	TxMessage     string
 }
 
+// Type returns the packet type.
 func (*Status) Type() PacketType { return TypeStatus }
 
 func decodeStatus(r *reader, h Header) *Status {
@@ -179,6 +184,7 @@ func decodeStatus(r *reader, h Header) *Status {
 
 // ---- Decode (type 2) ----
 
+// DecodeMsg reports a single decoded transmission heard by WSJT-X.
 type DecodeMsg struct {
 	Header
 	New            bool
@@ -192,6 +198,7 @@ type DecodeMsg struct {
 	OffAir         bool
 }
 
+// Type returns the packet type.
 func (*DecodeMsg) Type() PacketType { return TypeDecode }
 
 func decodeDecode(r *reader, h Header) *DecodeMsg {
@@ -222,12 +229,14 @@ func sign(v float64) float64 {
 
 // ---- Clear (type 3) ----
 
+// Clear requests that WSJT-X clear its decode window(s).
 type Clear struct {
 	Header
 	HasWindow bool
 	Window    byte
 }
 
+// Type returns the packet type.
 func (*Clear) Type() PacketType { return TypeClear }
 
 func decodeClear(r *reader, h Header) *Clear {
@@ -241,6 +250,7 @@ func decodeClear(r *reader, h Header) *Clear {
 
 // ---- Reply (type 4) ----
 
+// Reply instructs WSJT-X to reply to a previously decoded transmission.
 type Reply struct {
 	Header
 	Time           time.Time
@@ -253,8 +263,10 @@ type Reply struct {
 	Modifiers      Modifier
 }
 
+// Type returns the packet type.
 func (*Reply) Type() PacketType { return TypeReply }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *Reply) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID
@@ -275,6 +287,7 @@ func (p *Reply) Encode() []byte {
 
 // ---- QSO Logged (type 5) ----
 
+// QSOLogged reports a QSO that WSJT-X has just logged.
 type QSOLogged struct {
 	Header
 	DateTimeOff    time.Time
@@ -296,6 +309,7 @@ type QSOLogged struct {
 	PropMode       string
 }
 
+// Type returns the packet type.
 func (*QSOLogged) Type() PacketType { return TypeQSOLogged }
 
 func decodeQSOLogged(r *reader, h Header) *QSOLogged {
@@ -321,6 +335,7 @@ func decodeQSOLogged(r *reader, h Header) *QSOLogged {
 	}
 }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *QSOLogged) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID
@@ -350,12 +365,15 @@ func (p *QSOLogged) Encode() []byte {
 
 // ---- Close (type 6) ----
 
+// Close signals that the sender is shutting down.
 type Close struct {
 	Header
 }
 
+// Type returns the packet type.
 func (*Close) Type() PacketType { return TypeClose }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *Close) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID
@@ -375,8 +393,10 @@ type HaltTx struct {
 	Mode bool
 }
 
+// Type returns the packet type.
 func (*HaltTx) Type() PacketType { return TypeHaltTx }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *HaltTx) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID
@@ -390,12 +410,14 @@ func (p *HaltTx) Encode() []byte {
 
 // ---- Free Text (type 9) ----
 
+// FreeText sets (and optionally transmits) a free-text message in WSJT-X.
 type FreeText struct {
 	Header
 	Text string
 	Send bool
 }
 
+// Type returns the packet type.
 func (*FreeText) Type() PacketType { return TypeFreeText }
 
 // NewFreeText returns a FreeText with Send defaulting to true.
@@ -403,6 +425,7 @@ func NewFreeText(text string) *FreeText {
 	return &FreeText{Text: text, Send: true}
 }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *FreeText) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID
@@ -417,11 +440,13 @@ func (p *FreeText) Encode() []byte {
 
 // ---- Logged ADIF (type 12) ----
 
+// ADIF carries the ADIF record for a QSO that WSJT-X has logged.
 type ADIF struct {
 	Header
 	ADIF string
 }
 
+// Type returns the packet type.
 func (*ADIF) Type() PacketType { return TypeLoggedADIF }
 
 func decodeADIF(r *reader, h Header) *ADIF {
@@ -440,6 +465,7 @@ type HighlightCallsign struct {
 	HighlightLast bool
 }
 
+// Type returns the packet type.
 func (*HighlightCallsign) Type() PacketType { return TypeHighlightCallsign }
 
 // NewHighlightCallsign returns a highlight packet with the original's default
@@ -453,6 +479,7 @@ func NewHighlightCallsign(call string) *HighlightCallsign {
 	}
 }
 
+// Encode serialises the message into the WSJT-X wire format.
 func (p *HighlightCallsign) Encode() []byte {
 	w := &writer{}
 	clientID := p.ClientID

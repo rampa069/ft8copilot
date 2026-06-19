@@ -334,14 +334,14 @@ func (f *fanout) WithGroup(name string) slog.Handler {
 type rotatingWriter struct {
 	mu      sync.Mutex
 	path    string
-	max     int64
+	maxSize int64
 	backups int
 	file    *os.File
 	size    int64
 }
 
-func newRotatingWriter(path string, max int64, backups int) (*rotatingWriter, error) {
-	w := &rotatingWriter{path: path, max: max, backups: backups}
+func newRotatingWriter(path string, maxSize int64, backups int) (*rotatingWriter, error) {
+	w := &rotatingWriter{path: path, maxSize: maxSize, backups: backups}
 	if err := w.open(); err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func (w *rotatingWriter) open() error {
 	}
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	w.file = f
@@ -366,7 +366,7 @@ func (w *rotatingWriter) open() error {
 func (w *rotatingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.size+int64(len(p)) > w.max {
+	if w.size+int64(len(p)) > w.maxSize {
 		if err := w.rotate(); err != nil {
 			return 0, err
 		}

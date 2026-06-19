@@ -17,6 +17,7 @@ const (
 // PacketType identifies a WSJT-X message. The numeric values are wire values.
 type PacketType uint32
 
+// Packet type wire values for the WSJT-X UDP protocol.
 const (
 	TypeHeartbeat         PacketType = 0  // Out/In
 	TypeStatus            PacketType = 1  // Out
@@ -39,6 +40,7 @@ const (
 // Mode is the single-character FT mode marker used on Decode/Reply messages.
 type Mode string
 
+// Mode markers for FT8 and FT4.
 const (
 	ModeFT8 Mode = "~"
 	ModeFT4 Mode = "+"
@@ -73,6 +75,7 @@ func ModeFromName(name string) Mode {
 // Modifier is a Qt keyboard-modifier bitmask carried on Reply messages.
 type Modifier uint8
 
+// Keyboard-modifier bitmask values carried on Reply messages.
 const (
 	NoModifier  Modifier = 0x00
 	ShiftMod    Modifier = 0x02
@@ -86,6 +89,7 @@ const (
 // SOMode is the special-operating mode reported in Status messages.
 type SOMode uint8
 
+// Special-operating-mode values reported in Status messages.
 const (
 	SONone     SOMode = 0
 	SONAVHF    SOMode = 1

@@ -57,10 +57,13 @@ func NewSink(capacity int, level slog.Level) *Sink {
 	}}
 }
 
+// Enabled reports whether the sink handles records at the given level.
 func (s *Sink) Enabled(_ context.Context, l slog.Level) bool {
 	return l >= s.core.level
 }
 
+// Handle formats the record's message and attributes and appends the resulting
+// entry to the ring buffer, broadcasting it to subscribers.
 func (s *Sink) Handle(_ context.Context, r slog.Record) error {
 	var b strings.Builder
 	b.WriteString(r.Message)
@@ -73,6 +76,8 @@ func (s *Sink) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
+// WithAttrs returns a handler that prepends the given attributes to every
+// record, sharing the same underlying ring buffer.
 func (s *Sink) WithAttrs(as []slog.Attr) slog.Handler {
 	if len(as) == 0 {
 		return s
@@ -85,6 +90,8 @@ func (s *Sink) WithAttrs(as []slog.Attr) slog.Handler {
 	return &Sink{core: s.core, group: s.group, attrs: b.String()}
 }
 
+// WithGroup returns a handler that qualifies subsequent attribute keys with the
+// given group name, sharing the same underlying ring buffer.
 func (s *Sink) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return s

@@ -14,7 +14,7 @@ func newRankerForTest(h *harness, deps Deps) *Ranker {
 		deps.Blacklist = blacklist.New(nil)
 	}
 	r := NewRanker(deps)
-	r.Base.CacheTTL = 0 // reflect each insert immediately
+	r.CacheTTL = 0 // reflect each insert immediately
 	return r
 }
 

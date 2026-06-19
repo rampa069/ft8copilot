@@ -35,11 +35,11 @@ func TestLoadSample(t *testing.T) {
 		t.Errorf("CQZone.List = %v, want %v (strings)", cq.List, want)
 	}
 
-	any, ok := cfg.Selectors["Any"]
+	anySel, ok := cfg.Selectors["Any"]
 	if !ok {
 		t.Fatal("Selectors missing Any")
 	}
-	if !any.LOTWUsersOnly {
+	if !anySel.LOTWUsersOnly {
 		t.Error("Any.LOTWUsersOnly = false, want true")
 	}
 

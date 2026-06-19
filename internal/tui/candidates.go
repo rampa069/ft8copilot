@@ -29,7 +29,6 @@ var (
 	stDetRow  = lipgloss.NewStyle().Foreground(colText).Background(colPanel)
 	stDetDim  = lipgloss.NewStyle().Foreground(colDim).Background(colPanel)
 	stDetPick = lipgloss.NewStyle().Foreground(colPanel).Background(colRunning).Bold(true)
-	stDetOK   = lipgloss.NewStyle().Foreground(colRunning).Background(colPanel)
 )
 
 // renderCandidatesFull draws the detailed, scrollable candidate table into

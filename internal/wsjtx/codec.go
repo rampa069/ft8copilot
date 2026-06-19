@@ -49,14 +49,6 @@ func (r *reader) byteVal() byte {
 
 func (r *reader) boolVal() bool { return r.byteVal() != 0 }
 
-func (r *reader) uint16() uint16 {
-	b := r.take(2)
-	if b == nil {
-		return 0
-	}
-	return binary.BigEndian.Uint16(b)
-}
-
 func (r *reader) uint32() uint32 {
 	b := r.take(4)
 	if b == nil {

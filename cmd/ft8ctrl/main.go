@@ -83,7 +83,7 @@ func run() error {
 	} else {
 		logger, closer = applog.Setup(logfile)
 	}
-	defer closer.Close()
+	defer func() { _ = closer.Close() }()
 	slog.SetDefault(logger)
 
 	// Database + DXCC enrichment.
@@ -91,7 +91,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	logger.Info("database ready", "path", cfg.FT8Ctrl.DBName)
 
 	entities, err := dxcc.New()
@@ -151,7 +151,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer seq.Close()
+	defer func() { _ = seq.Close() }()
 
 	// Hot-reload the configuration on SIGHUP. Selector chain, blacklist,
 	// retry_time, tx_retries, tx_power and follow_frequency take effect without
@@ -265,8 +265,8 @@ func reloadOnHUP(ctx context.Context, path string, cfg **config.Config, members 
 // warnImmutable logs a warning for each field that changed in the new config but
 // cannot be applied to a running daemon (it requires a restart): the sockets,
 // the database and the station identity.
-func warnImmutable(old, new *config.Config, logger *slog.Logger) {
-	o, n := old.FT8Ctrl, new.FT8Ctrl
+func warnImmutable(old, updated *config.Config, logger *slog.Logger) {
+	o, n := old.FT8Ctrl, updated.FT8Ctrl
 	warn := func(field, was, now string) {
 		if was != now {
 			logger.Warn("reload: change requires a restart, ignoring", "field", field, "was", was, "now", now)

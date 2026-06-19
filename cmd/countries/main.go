@@ -46,7 +46,7 @@ func run(args []string) error {
 	fs.StringVar(&prefix, "prefix", "", "List all the prefixes for a given country")
 
 	if err := fs.Parse(args); err != nil {
-		return errors.New("Argument Error")
+		return errors.New("argument error")
 	}
 
 	// Enforce the required, mutually-exclusive group: exactly one flag.
