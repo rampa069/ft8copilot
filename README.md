@@ -41,7 +41,7 @@ Requires Go 1.26+.
 make build      # builds bin/ft8ctrl, bin/lookup, bin/countries
 make test       # run the unit + integration tests
 make lint       # golangci-lint (optional)
-make release    # static binaries for linux/amd64, linux/arm64, darwin/arm64
+make release    # static binaries for linux/{amd64,arm64}, darwin/{amd64,arm64} -> dist/
 ```
 
 Or install a single command directly:
