@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/rampamac/ft8copilot/internal/dxcc"
 	"github.com/rampamac/ft8copilot/internal/geo"
@@ -54,6 +55,13 @@ WHERE status <> 2`
 const updateSQL = "UPDATE cqcalls SET status = ? WHERE status <> 2 AND call = ? AND band = ?"
 
 const deleteSQL = "DELETE FROM cqcalls WHERE status = 1 AND call = ? AND band = ?"
+
+// importSQL inserts a worked (status = 2) row, upgrading any existing row for
+// the same (call, band) to worked. Idempotent: re-importing the same QSO just
+// re-asserts status = 2.
+const importSQL = `
+INSERT INTO cqcalls VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(call, band) DO UPDATE SET status = 2`
 
 // Writer applies Commands to the Store. It owns the geo origin (the operator's
 // grid) and the DXCC lookup used to enrich Insert commands. A single Writer
@@ -164,6 +172,78 @@ func (w *Writer) insert(spot Spot) error {
 		w.log.Debug("stored", "call", spot.Call, "country", entity.Country, "grid", spot.Grid)
 	}
 	return nil
+}
+
+// WorkedQSO is a historical QSO to import as worked (status = 2), e.g. from an
+// ADIF log. Grid and Frequency are optional; the Country/Continent/zone fields
+// are used as a fallback enrichment when the DXCC lookup by call fails.
+type WorkedQSO struct {
+	Call      string
+	Band      int
+	Grid      string    // Maidenhead locator; may be empty
+	Frequency uint64    // dial frequency in Hz; may be 0
+	Time      time.Time // QSO time (UTC)
+
+	// ADIF-provided enrichment, used only if entities.Lookup(Call) fails.
+	Country   string
+	Continent string
+	CQZone    int
+	ITUZone   int
+}
+
+// ImportWorked upserts a worked QSO (status = 2). Unlike insert it tolerates a
+// missing or invalid grid (geo fields are then zero, which is irrelevant for a
+// worked row). DXCC is resolved from the callsign; when that fails it falls back
+// to the QSO's own Country/Continent/zone fields. It returns ok=false (skipped)
+// when neither yields a country, or when the band is unknown (0).
+func (w *Writer) ImportWorked(q WorkedQSO) (ok bool, err error) {
+	if q.Call == "" || q.Band == 0 {
+		return false, nil
+	}
+
+	country, continent, cqz, ituz := q.Country, q.Continent, q.CQZone, q.ITUZone
+	if entity, lerr := w.entities.Lookup(q.Call); lerr == nil {
+		country, continent, cqz, ituz = entity.Country, entity.Continent, entity.CQZone, entity.ITUZone
+	} else if country == "" {
+		// No DXCC match and no ADIF country to fall back on.
+		w.log.Debug("import skipped: no country", "call", q.Call)
+		return false, nil
+	}
+
+	// Geo is optional for a worked row: use it only when a grid is present and
+	// parses (an empty grid resolves to (0,0), which is not a real location).
+	var lat, lon, distance float64
+	var azimuth int
+	if q.Grid != "" {
+		if point, perr := geo.GridToLatLon(q.Grid); perr == nil {
+			lat, lon = point.Lat, point.Lon
+			distance = geo.Distance(w.origin, point)
+			azimuth = geo.Azimuth(w.origin, point)
+		}
+	}
+
+	packetJSON, err := json.Marshal(Packet{Time: q.Time.UTC()})
+	if err != nil {
+		return false, err
+	}
+
+	_, err = w.store.db.Exec(importSQL,
+		q.Call,
+		"", // extra
+		q.Time.UTC().Format(timeLayout),
+		2, // status = worked
+		0, // snr (unknown)
+		q.Grid,
+		lat, lon, distance, azimuth,
+		country, continent, cqz, ituz,
+		int64(q.Frequency),
+		q.Band,
+		string(packetJSON),
+	)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func cmdType(cmd Command) string {

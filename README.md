@@ -31,6 +31,7 @@ binaries (no cgo, no SQLite system library required).
 - **`ft8ctrl`** — the automation daemon (port of `ft8ctrl.py`).
 - **`lookup`** — inspect the `cqcalls` database (port of `lookup.py`).
 - **`countries`** — DXCC entity lookup helper (port of `countries.py`).
+- **`adif`** — import/export the `cqcalls` database in ADIF format.
 
 ## Install
 
@@ -161,6 +162,37 @@ bin/countries -c W6BSD           # resolve a callsign/prefix -> country, zones
 bin/countries -C Cuba            # check an entity exists
 bin/countries -p Cuba            # list all prefixes for an entity
 ```
+
+### `adif` — import / export the database
+
+```sh
+bin/adif -c ft8ctrl.yaml import mylog.adi             # import, marking QSOs worked
+bin/adif -c ft8ctrl.yaml import --dry-run mylog.adi   # parse and report only
+bin/adif -c ft8ctrl.yaml export worked.adi            # export worked rows
+bin/adif -c ft8ctrl.yaml export --all --band 20 -     # filtered export to stdout
+```
+
+**Import.** The "worked" status (`status = 2`) is normally set only when WSJT-X
+logs a live QSO, so a fresh database has no history: the `DXCC100` selector and
+already-worked filtering have nothing to go on until you make contacts. Importing
+an ADIF export (WSJT-X, QRZ, LoTW, …) seeds that history. Each record is upserted
+into `cqcalls` keyed by `(call, band)` with status "worked", enriched via the
+same DXCC lookup the selectors use (falling back to the ADIF `COUNTRY`/`CQZ`/
+`CONT` fields when a call can't be resolved). The band comes from the ADIF `BAND`
+field (`20m` → 20m) or `FREQ` as a fallback; a missing grid is fine. Re-running is
+idempotent. The summary reports imported / skipped / per-band:
+
+```
+parsed 7908 records
+imported 7907 QSOs (marked worked)
+skipped 1 (no band=1)
+by band: 80m=13  40m=885  30m=543  20m=4507  17m=415  15m=809  12m=120 ...
+```
+
+**Export.** Writes `cqcalls` rows as ADIF records (with a header and your
+`station_callsign`/`my_gridsquare` from the config). By default only worked rows
+are exported; `--all` exports every row, and `--band N` / `--status N` filter.
+Use `-` as the file to write to stdout (the summary then goes to stderr).
 
 ## Configuration
 

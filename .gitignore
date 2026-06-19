@@ -14,3 +14,7 @@ coverage.txt
 # Local config and runtime files
 ft8ctrl.yaml
 *.log
+
+# ADIF logs (personal QSO data — see the ADIF importer)
+*.adi
+*.adif

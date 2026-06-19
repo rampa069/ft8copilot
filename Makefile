@@ -1,6 +1,6 @@
 BINDIR := bin
 DISTDIR := dist
-CMDS   := ft8ctrl lookup countries
+CMDS   := ft8ctrl lookup countries adif
 GOFLAGS :=
 LDFLAGS := -s -w
 

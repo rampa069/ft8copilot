@@ -1,5 +1,27 @@
 package db
 
+import (
+	"strconv"
+	"strings"
+)
+
+// BandMetersFromName parses an ADIF band name (e.g. "20m", "160m", "2m") into
+// the band in metres. It returns 0 for names it cannot represent as an integer
+// number of metres — notably the centimetre bands ("70cm") and anything
+// unparseable — so callers can fall back to the dial frequency via Band.
+func BandMetersFromName(name string) int {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" || strings.HasSuffix(name, "cm") {
+		return 0
+	}
+	name = strings.TrimSuffix(name, "m")
+	n, err := strconv.Atoi(name)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
 // bandByMHz maps the integer MHz part of a dial frequency to the ham-radio band
 // in meters. Port of get_band in dbutils.py.
 var bandByMHz = map[uint64]int{
