@@ -61,7 +61,9 @@ type Sequencer struct {
 	sequence    map[int]bool
 	tracker     txTracker
 	lastSecond  int
-	sessionQSOs int // QSOs logged since startup (Run loop owns it, like current)
+	period      time.Duration // sub-second T/R period for fast modes (FT2); 0 = use integer-second sequence
+	lastPeriod  int64         // last fired period index for sub-second modes
+	sessionQSOs int           // QSOs logged since startup (Run loop owns it, like current)
 
 	// status is a snapshot the Run loop publishes for other goroutines (the TUI)
 	// to read without locking the runtime fields above.
@@ -337,8 +339,20 @@ func (s *Sequencer) handleStatus(p *wsjtx.Status) {
 		return
 	}
 
+	// Select the timing model for the live mode: whole-second sequence for
+	// FT8/FT4, or a sub-second period for fast modes (FT2). Unknown modes leave
+	// the previous timing in place.
 	if seq, ok := sequenceSeconds[p.TXMode]; ok {
+		if s.period != 0 {
+			s.log.Info("sequence timing: whole-second", "mode", p.TXMode)
+		}
 		s.sequence = seq
+		s.period = 0
+	} else if d, ok := subSecondPeriods[p.TXMode]; ok {
+		if s.period != d {
+			s.log.Info("sequence timing: sub-second period", "mode", p.TXMode, "period", d)
+		}
+		s.period = d
 	}
 	s.frequency = p.Frequency
 	s.txStatus = p.Transmitting || p.TXEnabled
@@ -386,16 +400,9 @@ func (s *Sequencer) sequenceCheck() {
 	if s.paused.Load() {
 		return
 	}
-	now := nowFunc().UTC()
-	sec := now.Second()
-	if !s.sequence[sec] {
+	if !s.newSequence() {
 		return
 	}
-	// Avoid re-firing within the same second (the original slept 1s here).
-	if sec == s.lastSecond {
-		return
-	}
-	s.lastSecond = sec
 
 	sel, ok := s.chain.Load().Select(db.Band(s.frequency))
 	if !ok {
@@ -405,6 +412,32 @@ func (s *Sequencer) sequenceCheck() {
 	s.callStation(sel)
 	s.current = sel.Call
 	s.tracker.reset()
+}
+
+// newSequence reports whether we have entered a fresh transmit sequence since
+// the last call, firing at most once per period. FT8/FT4 use the whole-second
+// start set (deduped per second); fast modes with a sub-second period (FT2) key
+// off the millisecond period index aligned to the UTC epoch.
+func (s *Sequencer) newSequence() bool {
+	now := nowFunc().UTC()
+	if s.period > 0 {
+		idx := now.UnixMilli() / s.period.Milliseconds()
+		if idx == s.lastPeriod {
+			return false
+		}
+		s.lastPeriod = idx
+		return true
+	}
+	sec := now.Second()
+	if !s.sequence[sec] {
+		return false
+	}
+	// Avoid re-firing within the same second (the original slept 1s here).
+	if sec == s.lastSecond {
+		return false
+	}
+	s.lastSecond = sec
+	return true
 }
 
 // callStation transmits a reply to the selected station.

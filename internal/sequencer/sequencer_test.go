@@ -238,6 +238,44 @@ func TestLogCallCountsSessionQSOs(t *testing.T) {
 	}
 }
 
+func TestHandleStatusFT2SetsSubSecondPeriod(t *testing.T) {
+	s, _ := newTestSeq(4)
+	s.handleStatus(&wsjtx.Status{TXMode: "FT2", Frequency: 50313000})
+	if s.period != 3750*time.Millisecond {
+		t.Errorf("FT2 period = %v, want 3.75s", s.period)
+	}
+	// Switching back to a whole-second mode restores the integer-second model.
+	s.handleStatus(&wsjtx.Status{TXMode: "FT8", Frequency: 14074000})
+	if s.period != 0 {
+		t.Errorf("FT8 should clear sub-second period, got %v", s.period)
+	}
+	if !s.sequence[2] {
+		t.Error("FT8 whole-second sequence not restored")
+	}
+}
+
+func TestNewSequenceFT2FiresOncePerPeriod(t *testing.T) {
+	s, _ := newTestSeq(0)
+	s.period = 3750 * time.Millisecond
+	// A minute boundary is also a 3.75 s period boundary (60000/3750 = 16).
+	base := time.Date(2026, 6, 19, 20, 0, 0, 0, time.UTC)
+	orig := nowFunc
+	defer func() { nowFunc = orig }()
+
+	nowFunc = func() time.Time { return base }
+	if !s.newSequence() {
+		t.Fatal("first check of a period should start a sequence")
+	}
+	nowFunc = func() time.Time { return base.Add(500 * time.Millisecond) }
+	if s.newSequence() {
+		t.Error("a second check within the same 3.75s period must not re-fire")
+	}
+	nowFunc = func() time.Time { return base.Add(3750 * time.Millisecond) }
+	if !s.newSequence() {
+		t.Error("the next 3.75s period should start a new sequence")
+	}
+}
+
 func TestHandleStatusUpdatesState(t *testing.T) {
 	s, ch := newTestSeq(4)
 	s.handleStatus(&wsjtx.Status{
