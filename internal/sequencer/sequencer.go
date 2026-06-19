@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/rampamac/ft8copilot/internal/config"
@@ -43,6 +44,11 @@ type Sequencer struct {
 	// locking required.
 	reload chan reloadParams
 
+	// paused gates the autopilot: while set, no station is called at sequence
+	// boundaries, but packet ingestion (decodes, status) keeps filling the
+	// database. It is toggled from another goroutine (the TUI), so it is atomic.
+	paused atomic.Bool
+
 	// runtime state
 	peer       *net.UDPAddr
 	frequency  uint64
@@ -51,6 +57,44 @@ type Sequencer struct {
 	sequence   map[int]bool
 	tracker    txTracker
 	lastSecond int
+
+	// status is a snapshot the Run loop publishes for other goroutines (the TUI)
+	// to read without locking the runtime fields above.
+	status atomic.Pointer[Status]
+}
+
+// Status is a point-in-time view of the sequencer for the TUI status panel.
+type Status struct {
+	Frequency    uint64 // dial frequency in Hz
+	Band         int    // band in metres
+	Transmitting bool   // currently keying the transmitter
+	Paused       bool   // autopilot suspended
+	Current      string // callsign being worked, empty when idle
+}
+
+// Status returns the most recent published snapshot (zero value before the Run
+// loop has run once). The Paused field always reflects the live flag, so a
+// pause/resume is visible immediately without waiting for the next publish. Safe
+// to call from any goroutine.
+func (s *Sequencer) Status() Status {
+	var st Status
+	if p := s.status.Load(); p != nil {
+		st = *p
+	}
+	st.Paused = s.paused.Load()
+	return st
+}
+
+// publishStatus snapshots the runtime fields for readers. Called from the Run
+// loop only, so reads of the runtime fields are race-free.
+func (s *Sequencer) publishStatus() {
+	s.status.Store(&Status{
+		Frequency:    s.frequency,
+		Band:         db.Band(s.frequency),
+		Transmitting: s.txStatus,
+		Paused:       s.paused.Load(),
+		Current:      s.current,
+	})
 }
 
 // New creates a Sequencer, binding the WSJT-X UDP socket. cmds is the channel
@@ -173,6 +217,7 @@ func (s *Sequencer) Run(ctx context.Context) error {
 			s.handlePacket(buf[:n])
 		}
 		s.sequenceCheck()
+		s.publishStatus()
 	}
 }
 
@@ -251,10 +296,42 @@ func (s *Sequencer) handleStatus(p *wsjtx.Status) {
 	}
 }
 
+// Pause suspends the autopilot: new stations are no longer called at sequence
+// boundaries. Database ingestion is unaffected. Safe to call from any goroutine.
+func (s *Sequencer) Pause() {
+	if !s.paused.Swap(true) {
+		s.log.Info("autopilot paused")
+	}
+}
+
+// Resume re-enables calling stations at sequence boundaries.
+func (s *Sequencer) Resume() {
+	if s.paused.Swap(false) {
+		s.log.Info("autopilot resumed")
+	}
+}
+
+// TogglePause flips the paused state and returns the new value.
+func (s *Sequencer) TogglePause() bool {
+	if s.Paused() {
+		s.Resume()
+		return false
+	}
+	s.Pause()
+	return true
+}
+
+// Paused reports whether the autopilot is currently suspended.
+func (s *Sequencer) Paused() bool { return s.paused.Load() }
+
 // sequenceCheck calls the best available station at a sequence boundary, when we
 // are not already transmitting.
 func (s *Sequencer) sequenceCheck() {
 	if s.txStatus {
+		return
+	}
+	// While paused, ingest packets but never initiate a call.
+	if s.paused.Load() {
 		return
 	}
 	now := nowFunc().UTC()

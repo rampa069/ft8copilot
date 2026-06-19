@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -19,16 +20,21 @@ import (
 
 	"github.com/rampamac/ft8copilot/internal/blacklist"
 	"github.com/rampamac/ft8copilot/internal/config"
+	"github.com/rampamac/ft8copilot/internal/control"
 	"github.com/rampamac/ft8copilot/internal/db"
 	"github.com/rampamac/ft8copilot/internal/dxcc"
 	applog "github.com/rampamac/ft8copilot/internal/log"
 	"github.com/rampamac/ft8copilot/internal/lotw"
 	"github.com/rampamac/ft8copilot/internal/selector"
 	"github.com/rampamac/ft8copilot/internal/sequencer"
+	"github.com/rampamac/ft8copilot/internal/tui"
 )
 
 // defaultLogfile mirrors LOGFILE_NAME in ft8ctrl.py.
 const defaultLogfile = "ft8ctrl-debug.log"
+
+// version is shown in the TUI header banner.
+const version = "experimental"
 
 // cmdQueue bounds the channel feeding the database writer.
 const cmdQueue = 256
@@ -43,6 +49,7 @@ func main() {
 func run() error {
 	configPath := flag.String("c", "", "path to the configuration file (ft8ctrl.yaml)")
 	flag.StringVar(configPath, "config", "", "path to the configuration file (ft8ctrl.yaml)")
+	tuiMode := flag.Bool("tui", false, "run the interactive terminal UI (BlueBEEP front-end)")
 	flag.Parse()
 
 	// Resolve the config path once so SIGHUP can reload the same file.
@@ -63,7 +70,19 @@ func run() error {
 	if logfile == "" {
 		logfile = defaultLogfile
 	}
-	logger, closer := applog.Setup(logfile)
+	// In TUI mode the front-end owns the terminal, so suppress the stderr
+	// console handler and route records to an in-memory sink for the log window
+	// instead (the rotating file still captures everything).
+	var (
+		logger  *slog.Logger
+		closer  io.Closer
+		logSink *applog.Sink
+	)
+	if *tuiMode {
+		logger, closer, logSink = applog.SetupTUI(logfile)
+	} else {
+		logger, closer = applog.Setup(logfile)
+	}
 	defer closer.Close()
 	slog.SetDefault(logger)
 
@@ -111,17 +130,22 @@ func run() error {
 	ownContinent := operatorContinent(cfg, entities, logger)
 	logger.Info("operator continent", "continent", ownContinent)
 
-	chain, err := selector.Build(cfg.FT8Ctrl.CallSelector, cfg.Selectors, selector.Deps{
+	selDeps := selector.Deps{
 		Store:     store,
 		Blacklist: blacklist.New(cfg.BlackList),
 		LOTW:      members,
 		Continent: ownContinent,
 		Log:       logger,
-	})
+	}
+	chain, err := selector.Build(cfg.FT8Ctrl.CallSelector, cfg.Selectors, selDeps)
 	if err != nil {
 		return err
 	}
 	logger.Info("call selectors", "chain", cfg.FT8Ctrl.CallSelector)
+
+	// A permissive ranker over the same deps backs the TUI "candidates in order"
+	// view (only used in --tui mode).
+	ranker := selector.NewRanker(selDeps)
 
 	seq, err := sequencer.New(cfg.FT8Ctrl, chain, cmds, logger)
 	if err != nil {
@@ -134,11 +158,52 @@ func run() error {
 	// a restart; socket/database/identity fields require one (see warnImmutable).
 	go reloadOnHUP(ctx, resolvedPath, &cfg, &members, seq, store, entities, &retryNanos, logger)
 
+	if *tuiMode {
+		ctrl := control.New(cfg, control.Deps{
+			Store:      store,
+			Members:    members,
+			Continent:  ownContinent,
+			Seq:        seq,
+			RetryNanos: &retryNanos,
+			Logger:     logger,
+		})
+		return runTUI(ctx, seq, store, ranker, ctrl, logSink, cfg.FT8Ctrl.MyCall, logger)
+	}
+
 	if err := seq.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	logger.Info("shutdown complete")
 	return nil
+}
+
+// runTUI runs the interactive front-end as the main loop while the sequencer
+// drives WSJT-X on a background goroutine. Quitting the TUI cancels the daemon
+// context so the sequencer, writer and purge goroutines stop; conversely a
+// SIGINT (ctx cancellation) tears the TUI down.
+func runTUI(ctx context.Context, seq *sequencer.Sequencer, store *db.Store, ranker *selector.Ranker, ctrl *control.Controller, logSink *applog.Sink, myCall string, logger *slog.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	seqErr := make(chan error, 1)
+	go func() { seqErr <- seq.Run(ctx) }()
+
+	err := tui.Run(ctx, tui.Deps{
+		Store:   store,
+		Seq:     seq,
+		Ranker:  ranker,
+		Control: ctrl,
+		LogSink: logSink,
+		MyCall:  myCall,
+		Version: version,
+	})
+	cancel() // stop the sequencer now that the UI is gone
+
+	if se := <-seqErr; se != nil && !errors.Is(se, context.Canceled) {
+		logger.Error("sequencer stopped with error", "err", se)
+	}
+	logger.Info("shutdown complete")
+	return err
 }
 
 // reloadOnHUP reloads the configuration file on each SIGHUP and applies the

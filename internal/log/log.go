@@ -26,12 +26,40 @@ const (
 // non-empty — a size-rotating file handler at DEBUG level. It returns the logger
 // and a Closer for the file (a no-op when there is no file).
 func Setup(logfile string) (*slog.Logger, io.Closer) {
+	return SetupWithConsole(logfile, true)
+}
+
+// SetupWithConsole is like Setup but lets the caller suppress the stderr console
+// handler. The TUI front-end owns the terminal, so it runs with console=false to
+// avoid corrupting the display; log records reach the UI through a separate sink
+// (and the rotating file still captures everything).
+func SetupWithConsole(logfile string, console bool) (*slog.Logger, io.Closer) {
+	logger, closer, _ := setup(logfile, console, nil)
+	return logger, closer
+}
+
+// SetupTUI builds the logger for TUI mode: no stderr console handler, the
+// rotating file at DEBUG, and an in-memory Sink (returned) that feeds the TUI
+// log window. The Sink accepts records at the LOG_LEVEL threshold.
+func SetupTUI(logfile string) (*slog.Logger, io.Closer, *Sink) {
+	sink := NewSink(defaultSinkCapacity, parseLevel(os.Getenv("LOG_LEVEL")))
+	logger, closer, _ := setup(logfile, false, sink)
+	return logger, closer, sink
+}
+
+// setup assembles the fanout logger from an optional console handler, an optional
+// rotating file handler, and an optional extra handler (the TUI sink). It returns
+// the logger, a Closer for the file, and the file handler's writer (nil when no
+// file).
+func setup(logfile string, console bool, extra slog.Handler) (*slog.Logger, io.Closer, io.Writer) {
 	level := parseLevel(os.Getenv("LOG_LEVEL"))
 
-	handlers := []slog.Handler{
-		newConsoleHandler(os.Stderr, level, useColor(os.Stderr)),
+	var handlers []slog.Handler
+	if console {
+		handlers = append(handlers, newConsoleHandler(os.Stderr, level, useColor(os.Stderr)))
 	}
 	var closer io.Closer = noopCloser{}
+	var fileW io.Writer
 
 	if logfile != "" {
 		rw, err := newRotatingWriter(expandHome(logfile), logfileMaxBytes, logfileBackups)
@@ -41,10 +69,15 @@ func Setup(logfile string) (*slog.Logger, io.Closer) {
 			handlers = append(handlers,
 				slog.NewTextHandler(rw, &slog.HandlerOptions{Level: slog.LevelDebug}))
 			closer = rw
+			fileW = rw
 		}
 	}
 
-	return slog.New(&fanout{handlers: handlers}), closer
+	if extra != nil {
+		handlers = append(handlers, extra)
+	}
+
+	return slog.New(&fanout{handlers: handlers}), closer, fileW
 }
 
 // parseLevel maps a LOG_LEVEL string to a slog level, defaulting to INFO.

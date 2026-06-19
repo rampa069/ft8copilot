@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // SQLite driver ("sqlite")
@@ -219,6 +220,50 @@ func (s *Store) Since(d time.Duration) ([]Record, error) {
 	rows, err := s.db.Query(
 		"SELECT "+columns+" FROM cqcalls WHERE time > ? ORDER BY time ASC",
 		cutoff.Format(timeLayout))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecords(rows)
+}
+
+// Query describes a flexible cqcalls search for the TUI search modal. Every
+// field is optional; set fields are ANDed together. Text matches the call,
+// country or grid (case-insensitive substring).
+type Query struct {
+	Text   string // OR-matched against call, country and grid (LIKE %text%)
+	Status *int   // exact status (0 unworked, 1 in progress, 2 worked)
+	Band   *int   // exact band in metres
+	Limit  int    // cap on rows returned (0 = no limit)
+}
+
+// Search runs a Query and returns the matching rows, most recent first. It is a
+// read-only helper for the TUI; the LIKE clauses lean on SQLite's
+// case-insensitive ASCII matching, so callers need not normalise case.
+func (s *Store) Search(q Query) ([]Record, error) {
+	query := "SELECT " + columns + " FROM cqcalls WHERE 1=1"
+	var args []any
+
+	if t := strings.TrimSpace(q.Text); t != "" {
+		like := "%" + t + "%"
+		query += " AND (call LIKE ? OR country LIKE ? OR grid LIKE ?)"
+		args = append(args, like, like, like)
+	}
+	if q.Status != nil {
+		query += " AND status = ?"
+		args = append(args, *q.Status)
+	}
+	if q.Band != nil {
+		query += " AND band = ?"
+		args = append(args, *q.Band)
+	}
+	query += " ORDER BY time DESC"
+	if q.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, q.Limit)
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

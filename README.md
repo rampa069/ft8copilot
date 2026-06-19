@@ -64,6 +64,53 @@ go install github.com/rampamac/ft8copilot/cmd/ft8ctrl@latest
    ```
 4. Watch WSJT-X make contacts. Stop with Ctrl-C.
 
+### Interactive TUI
+
+Run with `--tui` for an interactive terminal front-end (retro DOS look) instead
+of plain log output:
+
+```sh
+bin/ft8ctrl --tui -c ft8ctrl.yaml
+```
+
+The automation runs exactly as in headless mode — the sequencer keeps driving
+WSJT-X — while the UI shows live state and lets you steer it. Layout:
+
+```
+ FT8 CoPilot — EA5IUE
+╔═╡ Candidates · 20m ╞═══════════════╗╔═╡ Status ╞═══════════╗
+║▶  OK1KKI   -3  1450 15 Czech Rep.  ║║Auto     ● RUNNING    ║
+║   G3XYZ    -6  1300 14 England     ║║Band     20m          ║
+╚════════════════════════════════════╝╚══════════════════════╝
+╔═╡ Log ╞════════════════════════════════════════════════════╗
+║11:02:44 INFO  calling call=OK1KKI country="Czech Republic" ║
+╚════════════════════════════════════════════════════════════╝
+ F1 Help  F2 Pause  F3 Search  F4 Params  F5 Cands  F10 Quit
+```
+
+- **Candidates panel** — the band's spots ranked best-to-worst; the station the
+  autopilot would call next is marked `▶`.
+- **Status panel** — your call, band/frequency, autopilot `● RUNNING` /
+  `■ PAUSED`, the station being worked, and spot counts.
+- **Log window** — the live daemon log (the rotating debug file still captures
+  everything).
+
+Key bindings (also shown on the **F1** help screen):
+
+| key | action |
+|-----|--------|
+| `F1` | help |
+| `F2` / `Space` | pause / resume the autopilot (ingestion keeps running) |
+| `F3` | search the call database (by call / country / grid) |
+| `F4` | edit live parameters (`tx_power`, `tx_retries`, `follow_frequency`, `retry_time`, the selector chain, the blacklist) |
+| `F5` | full-screen ranked candidates view |
+| `F10` / `q` | quit |
+
+Parameter edits made in **F4** apply live through the same path as a `SIGHUP`
+reload (they are **not** written back to `ft8ctrl.yaml`; edit the file or send
+`SIGHUP` to persist). Identity/socket/database fields cannot be changed at
+runtime.
+
 #### Reloading the configuration without restarting
 
 Send `SIGHUP` to reload `ft8ctrl.yaml` in place — no need to stop the daemon or

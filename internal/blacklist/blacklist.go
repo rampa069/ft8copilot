@@ -28,6 +28,20 @@ func New(calls []string) *Blacklist {
 	return &Blacklist{calls: m}
 }
 
+// Normalize trims and uppercases each callsign, dropping blanks. It mirrors how
+// New canonicalises entries, for callers that need the cleaned list itself (e.g.
+// to display or persist it).
+func Normalize(calls []string) []string {
+	out := make([]string, 0, len(calls))
+	for _, c := range calls {
+		c = strings.ToUpper(strings.TrimSpace(c))
+		if c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Contains reports whether call is blacklisted. The query is trimmed and
 // uppercased before lookup. A nil *Blacklist safely returns false.
 func (b *Blacklist) Contains(call string) bool {
