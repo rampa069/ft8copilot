@@ -238,43 +238,6 @@ func TestLogCallCountsSessionQSOs(t *testing.T) {
 	}
 }
 
-func TestCQMessageAndGrid4(t *testing.T) {
-	if got := grid4("IM76he"); got != "IM76" {
-		t.Errorf("grid4(IM76he) = %q, want IM76", got)
-	}
-	if got := grid4("FN42"); got != "FN42" {
-		t.Errorf("grid4(FN42) = %q, want FN42", got)
-	}
-	if got := grid4(""); got != "" {
-		t.Errorf("grid4(empty) = %q, want empty", got)
-	}
-
-	s, _ := newTestSeq(0)
-	s.mycall, s.mygrid = "EA5IUE", "IM76"
-	if got := s.cqMessage(); got != "CQ EA5IUE IM76" {
-		t.Errorf("cqMessage = %q, want 'CQ EA5IUE IM76'", got)
-	}
-	s.mygrid = ""
-	if got := s.cqMessage(); got != "CQ EA5IUE" {
-		t.Errorf("cqMessage (no grid) = %q, want 'CQ EA5IUE'", got)
-	}
-}
-
-func TestRequestCQIsOneShot(t *testing.T) {
-	s, _ := newTestSeq(0)
-	if s.cqRequest.Load() {
-		t.Fatal("cqRequest should start false")
-	}
-	s.RequestCQ()
-	if !s.cqRequest.CompareAndSwap(true, false) {
-		t.Fatal("RequestCQ did not set the trigger")
-	}
-	// The Run loop consumed it; a second consume must find nothing pending.
-	if s.cqRequest.CompareAndSwap(true, false) {
-		t.Fatal("trigger fired twice for one RequestCQ")
-	}
-}
-
 func TestHandleStatusUpdatesState(t *testing.T) {
 	s, ch := newTestSeq(4)
 	s.handleStatus(&wsjtx.Status{

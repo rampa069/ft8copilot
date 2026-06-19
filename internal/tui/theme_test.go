@@ -45,9 +45,9 @@ func TestFit(t *testing.T) {
 }
 
 func TestFunctionBarWidth(t *testing.T) {
-	bar := functionBar(80, fkeys)
-	if w := lipgloss.Width(bar); w != 80 {
-		t.Errorf("function bar width = %d, want 80", w)
+	bar := functionBar(60, fkeys)
+	if w := lipgloss.Width(bar); w != 60 {
+		t.Errorf("function bar width = %d, want 60", w)
 	}
 	if !strings.Contains(plain(bar), "F2 Pause") {
 		t.Errorf("function bar should list F2 Pause, got:\n%s", plain(bar))

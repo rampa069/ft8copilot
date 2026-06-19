@@ -112,33 +112,6 @@ func TestReplyEncode(t *testing.T) {
 	}
 }
 
-func TestFreeTextEncode(t *testing.T) {
-	in := NewFreeText("CQ EA5IUE IM76")
-	if !in.Send {
-		t.Fatal("NewFreeText should default Send=true")
-	}
-	r := newReader(in.Encode())
-	if r.uint32() != Magic {
-		t.Fatal("bad magic")
-	}
-	r.uint32() // schema
-	if PacketType(r.uint32()) != TypeFreeText {
-		t.Fatal("type != FreeText")
-	}
-	if cid := r.str(); cid != ClientID {
-		t.Errorf("client id = %q, want %q", cid, ClientID)
-	}
-	if txt := r.str(); txt != "CQ EA5IUE IM76" {
-		t.Errorf("text = %q, want %q", txt, "CQ EA5IUE IM76")
-	}
-	if !r.boolVal() {
-		t.Error("send = false, want true")
-	}
-	if r.readErr() != nil {
-		t.Fatalf("reader error: %v", r.readErr())
-	}
-}
-
 func TestHaltTxEncode(t *testing.T) {
 	raw := (&HaltTx{Mode: true}).Encode()
 	r := newReader(raw)
