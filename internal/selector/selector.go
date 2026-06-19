@@ -67,7 +67,11 @@ type Deps struct {
 	// LOTW is the live LOTW membership. It is used only by selectors configured
 	// with lotw_users_only; may be nil if LOTW could not be loaded.
 	LOTW Membership
-	Log  *slog.Logger
+	// Continent is the operator's own continent (NA/EU/AS/…), used by the
+	// "ignore DX calling own continent" filter. A per-selector my_continent
+	// overrides it; when both are empty Base falls back to defaultContinent.
+	Continent string
+	Log       *slog.Logger
 }
 
 // Constructor builds a selector from its config section and the shared deps.

@@ -57,7 +57,13 @@ func NewBase(name string, cfg config.SelectorConfig, deps Deps) *Base {
 	if cfg.Delta > 0 {
 		delta = time.Duration(cfg.Delta) * time.Second
 	}
+	// Own-continent default chain: the hardcoded fallback, then the operator's
+	// continent from Deps (global ft8ctrl.my_continent or derived from my_call),
+	// then a per-selector my_continent override with the highest priority.
 	continent := defaultContinent
+	if deps.Continent != "" {
+		continent = deps.Continent
+	}
 	if cfg.MyContinent != "" {
 		continent = cfg.MyContinent
 	}

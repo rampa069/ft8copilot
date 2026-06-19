@@ -40,6 +40,7 @@ type Config struct {
 type FT8Ctrl struct {
 	MyCall          string     `yaml:"my_call"`
 	MyGrid          string     `yaml:"my_grid"`
+	MyContinent     string     `yaml:"my_continent"` // own continent (NA/EU/AS/…); derived from my_call when empty
 	DBName          string     `yaml:"db_name"` // ~ is expanded on load
 	WSJTIP          string     `yaml:"wsjt_ip"`
 	WSJTPort        int        `yaml:"wsjt_port"`

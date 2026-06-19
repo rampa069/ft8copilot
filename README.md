@@ -122,6 +122,7 @@ See `ft8ctrl.yaml.sample` for a fully commented example. The `ft8ctrl` section:
 | key | meaning |
 |-----|---------|
 | `my_call` / `my_grid` | your callsign and Maidenhead grid (origin for distances) |
+| `my_continent` | your own continent (NA/EU/AS/…), used to skip stations calling `CQ DX` from your own continent; auto-derived from `my_call` when omitted |
 | `db_name` | SQLite database path (`~` is expanded) |
 | `wsjt_ip` / `wsjt_port` | where to listen for WSJT-X UDP (default `127.0.0.1:2238`) |
 | `follow_frequency` | send replies on the caller's audio frequency (SHIFT modifier) |

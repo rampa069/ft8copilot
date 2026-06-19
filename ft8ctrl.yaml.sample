@@ -7,6 +7,10 @@
 ft8ctrl:
   my_call: -- CALL_SIGN --
   my_grid: -- GRID --
+  # my_continent: your own continent (NA/EU/AS/AF/OC/SA). Used to skip stations
+  # calling "CQ DX" from your own continent. Auto-derived from my_call when
+  # omitted, so you normally don't need to set it.
+  # my_continent: EU
   db_name: ~/ft8ctl.sql
   wsjt_ip: 127.0.0.1
   wsjt_port: 2238

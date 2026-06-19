@@ -108,10 +108,14 @@ func run() error {
 		}
 	}
 
+	ownContinent := operatorContinent(cfg, entities, logger)
+	logger.Info("operator continent", "continent", ownContinent)
+
 	chain, err := selector.Build(cfg.FT8Ctrl.CallSelector, cfg.Selectors, selector.Deps{
 		Store:     store,
 		Blacklist: blacklist.New(cfg.BlackList),
 		LOTW:      members,
+		Continent: ownContinent,
 		Log:       logger,
 	})
 	if err != nil {
@@ -128,7 +132,7 @@ func run() error {
 	// Hot-reload the configuration on SIGHUP. Selector chain, blacklist,
 	// retry_time, tx_retries, tx_power and follow_frequency take effect without
 	// a restart; socket/database/identity fields require one (see warnImmutable).
-	go reloadOnHUP(ctx, resolvedPath, &cfg, &members, seq, store, &retryNanos, logger)
+	go reloadOnHUP(ctx, resolvedPath, &cfg, &members, seq, store, entities, &retryNanos, logger)
 
 	if err := seq.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
@@ -144,7 +148,7 @@ func run() error {
 // only by this goroutine once the sequencer is running, so no locking is
 // needed; retryNanos and the sequencer have their own synchronization.
 func reloadOnHUP(ctx context.Context, path string, cfg **config.Config, members *selector.Membership,
-	seq *sequencer.Sequencer, store *db.Store, retryNanos *atomic.Int64, logger *slog.Logger) {
+	seq *sequencer.Sequencer, store *db.Store, entities *dxcc.DXCC, retryNanos *atomic.Int64, logger *slog.Logger) {
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	defer signal.Stop(hup)
@@ -176,6 +180,7 @@ func reloadOnHUP(ctx context.Context, path string, cfg **config.Config, members 
 				Store:     store,
 				Blacklist: blacklist.New(newCfg.BlackList),
 				LOTW:      mem,
+				Continent: operatorContinent(newCfg, entities, logger),
 				Log:       logger,
 			})
 			if err != nil {
@@ -210,6 +215,22 @@ func warnImmutable(old, new *config.Config, logger *slog.Logger) {
 	warn("logger_ip", o.LoggerIP, n.LoggerIP)
 	warn("logger_port", fmt.Sprintf("%d", o.LoggerPort), fmt.Sprintf("%d", n.LoggerPort))
 	warn("logfile_name", o.LogfileName, n.LogfileName)
+}
+
+// operatorContinent returns the operator's own continent for the "ignore DX
+// calling own continent" filter: the configured ft8ctrl.my_continent, or the
+// continent of my_call resolved via DXCC, or "" when neither is available (the
+// selectors then fall back to their built-in default).
+func operatorContinent(cfg *config.Config, entities *dxcc.DXCC, logger *slog.Logger) string {
+	if c := cfg.FT8Ctrl.MyContinent; c != "" {
+		return c
+	}
+	if ent, err := entities.Lookup(cfg.FT8Ctrl.MyCall); err == nil && ent.Continent != "" {
+		return ent.Continent
+	}
+	logger.Warn("could not determine own continent from my_call; using selector default",
+		"my_call", cfg.FT8Ctrl.MyCall)
+	return ""
 }
 
 // needsLOTW reports whether any configured selector restricts to LOTW users.

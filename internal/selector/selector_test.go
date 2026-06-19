@@ -147,6 +147,33 @@ func TestCandidatesDXContinentFilter(t *testing.T) {
 	}
 }
 
+func TestCandidatesContinentFromDeps(t *testing.T) {
+	h := newHarness(t)
+	// CO8LY is NA calling CQ DX. For a EU operator (Deps.Continent=EU) it must
+	// be kept; the hardcoded default would have wrongly dropped it as "own
+	// continent".
+	h.insert(t, "CO8LY", "DX", -3)
+
+	sel := newAny(h, "Any", config.SelectorConfig{}, Deps{Continent: "EU"})
+	cands := sel.Candidates(20)
+	if len(cands) != 1 || cands[0].Call != "CO8LY" {
+		t.Fatalf("candidates = %+v, want CO8LY kept for EU operator", calls(cands))
+	}
+}
+
+func TestPerSelectorContinentOverridesDeps(t *testing.T) {
+	h := newHarness(t)
+	// Per-selector my_continent (NA) wins over Deps.Continent (EU): a NA station
+	// calling CQ DX is dropped again.
+	h.insert(t, "CO8LY", "DX", -3)
+
+	cfg := config.SelectorConfig{MyContinent: "NA"}
+	sel := newAny(h, "Any", cfg, Deps{Continent: "EU"})
+	if cands := sel.Candidates(20); len(cands) != 0 {
+		t.Fatalf("candidates = %+v, want none (per-selector NA filter)", calls(cands))
+	}
+}
+
 func TestLOTWFilter(t *testing.T) {
 	h := newHarness(t)
 	h.insert(t, "CO8LY", "", -10)
