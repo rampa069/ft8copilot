@@ -224,13 +224,16 @@ func functionBar(width int, keys []functionKey) string {
 	return b.String()
 }
 
-// banner is a small ASCII wordmark for splash / help screens. Kept narrow enough
-// (44 cols) to fit a default terminal.
+// banner is a small ASCII wordmark for splash / help screens. Uses a plain
+// figlet "small" face so every glyph is unambiguous (the old box-drawing "8"
+// read as an "S"). 43 cols × 5 rows — narrow enough for a default terminal.
 func banner() string {
 	art := []string{
-		`╔═╗╔╦╗╔═╗  ╔═╗┌─┐╔═╗┬┬  ┌─┐┌┬┐`,
-		`╠╣  ║ ╚═╗  ║  │ │╠═╝││  │ │ │ `,
-		`╚   ╩ ╚═╝  ╚═╝└─┘╩  ┴┴─┘└─┘ ┴ `,
+		` ___ _____ ___    ___          _ _     _`,
+		`| __|_   _( _ )  / __|___ _ __(_) |___| |_`,
+		`| _|  | | / _ \ | (__/ _ \ '_ \ | / _ \  _|`,
+		`|_|   |_| \___/  \___\___/ .__/_|_\___/\__|`,
+		`                         |_|`,
 	}
 	style := lipgloss.NewStyle().Foreground(colBorderHi).Background(colPanel).Bold(true)
 	for i, l := range art {

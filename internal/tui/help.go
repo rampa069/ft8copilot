@@ -29,7 +29,7 @@ func helpView(screenW, screenH int) string {
 	if dw > screenW-4 {
 		dw = screenW - 4
 	}
-	dh := len(helpKeys) + 8
+	dh := len(helpKeys) + 10 // +5 banner rows, +2 blanks, +1 footer, +2 borders
 	if dh > screenH-2 {
 		dh = screenH - 2
 	}
