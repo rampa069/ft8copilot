@@ -79,16 +79,33 @@ type Constructor func(name string, cfg config.SelectorConfig, deps Deps) (Select
 
 // registry maps a selector's config-section name to its constructor. Plugins
 // register themselves via Register (replacing Python's dynamic import).
-var registry = map[string]Constructor{}
+// registryOrder preserves registration order so Names() is deterministic.
+var (
+	registry      = map[string]Constructor{}
+	registryOrder []string
+)
 
 // Register adds a selector constructor under name. Typically called from a
 // plugin file's init().
-func Register(name string, c Constructor) { registry[name] = c }
+func Register(name string, c Constructor) {
+	if _, ok := registry[name]; !ok {
+		registryOrder = append(registryOrder, name)
+	}
+	registry[name] = c
+}
 
 // Registered reports whether a selector name has a constructor.
 func Registered(name string) bool {
 	_, ok := registry[name]
 	return ok
+}
+
+// Names returns the registered selector names in registration order. The TUI
+// parameter editor uses it to show which selectors are available.
+func Names() []string {
+	out := make([]string, len(registryOrder))
+	copy(out, registryOrder)
+	return out
 }
 
 // Build resolves the configured selector names into a Chain, in order. cfgs is
