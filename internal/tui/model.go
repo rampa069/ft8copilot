@@ -23,6 +23,7 @@ var fkeys = []functionKey{
 	{"F3", "Search"},
 	{"F4", "Params"},
 	{"F5", "Cands"},
+	{"F6", "CQ"},
 	{"F10", "Quit"},
 }
 
@@ -159,6 +160,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f5":
 			m.candidates = true
 			m.candOffset = 0
+			return m, nil
+		case "f6":
+			// Manual one-shot CQ (FT8CoPilot-2zh). The CQ-mode toggle
+			// (FT8CoPilot-3ef) will replace this with a sustained mode.
+			if m.d.Seq != nil {
+				m.d.Seq.RequestCQ()
+			}
 			return m, nil
 		case "f1":
 			m.help = true

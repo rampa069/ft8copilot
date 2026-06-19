@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -30,6 +31,7 @@ var nowFunc = time.Now
 type Sequencer struct {
 	conn         *net.UDPConn
 	mycall       string
+	mygrid       string // 4-char Maidenhead grid for our own CQ
 	followFreq   bool
 	considerRR73 bool // also enrol stations sending RR73/73 as candidates
 	txPower      int
@@ -52,6 +54,12 @@ type Sequencer struct {
 	// boundaries, but packet ingestion (decodes, status) keeps filling the
 	// database. It is toggled from another goroutine (the TUI), so it is atomic.
 	paused atomic.Bool
+
+	// cqRequest is a one-shot "call CQ now" trigger set from the TUI and consumed
+	// by the Run loop, so the actual transmit happens in the loop's goroutine
+	// (which owns peer/conn). The CQ-mode state machine (FT8CoPilot-3ef) will
+	// later drive CQ calls itself; this is the manual primitive.
+	cqRequest atomic.Bool
 
 	// runtime state
 	peer        *net.UDPAddr
@@ -141,6 +149,7 @@ func New(cfg config.FT8Ctrl, chain selector.Chain, cmds chan<- db.Command, log *
 	s := &Sequencer{
 		conn:         conn,
 		mycall:       cfg.MyCall,
+		mygrid:       grid4(cfg.MyGrid),
 		followFreq:   cfg.FollowFrequency,
 		considerRR73: cfg.ConsiderRR73,
 		txPower:      cfg.TXPower,
@@ -228,6 +237,9 @@ func (s *Sequencer) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 		s.applyReload()
+		if s.cqRequest.CompareAndSwap(true, false) {
+			s.callCQ()
+		}
 		_ = s.conn.SetReadDeadline(nowFunc().Add(readTimeout))
 		n, addr, err := s.conn.ReadFromUDP(buf)
 		if err != nil {
@@ -430,6 +442,51 @@ func (s *Sequencer) callStation(sel selector.Selection) {
 	if _, err := s.conn.WriteToUDP(reply.Encode(), s.peer); err != nil {
 		s.log.Error("transmit reply", "err", err)
 	}
+}
+
+// RequestCQ asks the Run loop to call CQ on its next iteration. Safe to call
+// from any goroutine; the transmit itself runs in the Run loop (which owns the
+// peer/conn). It is a one-shot — a pending request that has not fired yet is
+// not duplicated.
+func (s *Sequencer) RequestCQ() { s.cqRequest.Store(true) }
+
+// callCQ transmits a CQ with our callsign and grid via WSJT-X free text.
+//
+// WSJT-X has no dedicated "call CQ" UDP command, so we use a FreeText message
+// ("CQ <call> <grid>", Send=true). For this to actually key the radio, WSJT-X
+// must be ready to transmit: a running instance, the rig connected, and Tx
+// enabled (the free text replaces the current Tx message and transmits it on
+// the next slot). It transmits ONCE; repeated/periodic CQ is the job of the
+// CQ-mode state machine (FT8CoPilot-3ef). Called from the Run loop only.
+func (s *Sequencer) callCQ() {
+	if s.peer == nil {
+		s.log.Warn("call CQ requested but no WSJT-X peer yet")
+		return
+	}
+	msg := s.cqMessage()
+	s.log.Info("calling CQ", "message", msg)
+	if _, err := s.conn.WriteToUDP(wsjtx.NewFreeText(msg).Encode(), s.peer); err != nil {
+		s.log.Error("transmit CQ", "err", err)
+	}
+}
+
+// cqMessage builds the free-text CQ ("CQ <call> <grid>", or "CQ <call>" when no
+// grid is configured).
+func (s *Sequencer) cqMessage() string {
+	if s.mygrid == "" {
+		return "CQ " + s.mycall
+	}
+	return "CQ " + s.mycall + " " + s.mygrid
+}
+
+// grid4 trims a Maidenhead locator to its 4-character field/square, which is all
+// a standard FT8 CQ carries.
+func grid4(g string) string {
+	g = strings.TrimSpace(g)
+	if len(g) > 4 {
+		return g[:4]
+	}
+	return g
 }
 
 // stopTransmit asks WSJT-X to halt transmission immediately.
