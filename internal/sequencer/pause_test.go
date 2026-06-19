@@ -35,13 +35,13 @@ func TestPauseGatesSequenceCheck(t *testing.T) {
 		ok:     true,
 	}
 	s := &Sequencer{
-		chain:      selector.Chain{stub},
 		sequence:   map[int]bool{},
 		lastSecond: -1,
 		tracker:    txTracker{max: 5},
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		// peer stays nil so callStation is a no-op (no UDP needed).
 	}
+	setChain(s, selector.Chain{stub})
 
 	fixed := time.Date(2026, 6, 19, 12, 0, 15, 0, time.UTC)
 	restore := nowFunc

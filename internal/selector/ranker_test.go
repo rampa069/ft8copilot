@@ -71,6 +71,47 @@ func TestRankEmptyPool(t *testing.T) {
 	}
 }
 
+func TestRankChosenFollowsWiredPick(t *testing.T) {
+	h := newHarness(t)
+	h.insert(t, "G3XYZ", "", -3)  // highest SNR, top permissive pick
+	h.insert(t, "CO8LY", "", -10) // what the (stricter) chain would actually call
+
+	r := newRankerForTest(h, Deps{})
+	// Simulate a configured chain whose tighter rules pick the lower-SNR CO8LY.
+	var gotBand int
+	r.SetPick(func(band int) (Selection, bool) {
+		gotBand = band
+		c := Candidate{}
+		c.Call = "CO8LY"
+		return Selection{Candidate: c, Selector: "DXCC100"}, true
+	})
+
+	ranked := r.Rank(20)
+	if gotBand != 20 {
+		t.Errorf("pick called with band %d, want 20", gotBand)
+	}
+	if ranked[0].Call != "G3XYZ" || ranked[0].Chosen {
+		t.Errorf("permissive leader G3XYZ must be listed but not chosen, got chosen=%v", ranked[0].Chosen)
+	}
+	if ranked[1].Call != "CO8LY" || !ranked[1].Chosen {
+		t.Errorf("chain's pick CO8LY should be chosen, got %+v", ranked[1])
+	}
+}
+
+func TestRankNoChosenWhenChainDeclines(t *testing.T) {
+	h := newHarness(t)
+	h.insert(t, "G3XYZ", "", -3)
+
+	r := newRankerForTest(h, Deps{})
+	r.SetPick(func(int) (Selection, bool) { return Selection{}, false })
+
+	for _, rk := range r.Rank(20) {
+		if rk.Chosen {
+			t.Errorf("%s chosen, but chain declined — no row should be chosen", rk.Call)
+		}
+	}
+}
+
 func TestRankChosenSkipsIneligibleLeader(t *testing.T) {
 	h := newHarness(t)
 	h.insert(t, "W5XX", "", -2)   // highest SNR but blacklisted

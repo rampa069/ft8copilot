@@ -18,6 +18,12 @@ import (
 // selector with no lotw_users_only), so eligibility here means "callable by a
 // permissive selector"; a configured chain with tighter bounds may decline a
 // candidate the Ranker marks eligible.
+//
+// Eligibility colouring is therefore permissive, but the Chosen marker is not:
+// when a PickFunc is wired (SetPick, normally the live Sequencer.Pick), Chosen
+// flags the exact station the configured selector chain would call next, so the
+// TUI highlight always matches what the autopilot does. Without a PickFunc the
+// Ranker falls back to marking the top eligible candidate (standalone use).
 
 // Ineligible reasons, reported in Ranked.Reason (empty when eligible).
 const (
@@ -36,10 +42,17 @@ type Ranked struct {
 	Chosen   bool
 }
 
+// PickFunc reports the candidate a configured selector chain would call next on
+// a band, or false when the chain declines. Sequencer.Pick satisfies it; the
+// Ranker uses it to mark the Chosen candidate so the TUI highlight matches the
+// autopilot. It must be safe to call concurrently.
+type PickFunc func(band int) (Selection, bool)
+
 // Ranker ranks the candidate pool for a band. Build one with NewRanker from the
 // same Deps used to build the selector Chain.
 type Ranker struct {
 	*Base
+	pick PickFunc // optional; when set, drives the Chosen marker (see SetPick)
 }
 
 // NewRanker builds a Ranker over the shared deps, using the framework's default
@@ -48,9 +61,16 @@ func NewRanker(deps Deps) *Ranker {
 	return &Ranker{Base: NewBase("ranker", config.SelectorConfig{}, deps)}
 }
 
+// SetPick wires the live chain's selection so Rank marks the station the chain
+// would actually call as Chosen, instead of the permissive top-eligible row.
+// Pass the Sequencer's Pick method. Call once at startup before Rank is used.
+func (r *Ranker) SetPick(pick PickFunc) { r.pick = pick }
+
 // Rank returns the band's candidate pool sorted by SNR (descending), each
-// annotated with eligibility. The highest-SNR eligible candidate is marked
-// Chosen. The slice is empty when no spots are in the window.
+// annotated with eligibility. Exactly one candidate is marked Chosen: the
+// station the wired chain would call next (SetPick), or — with no PickFunc —
+// the highest-SNR eligible candidate. The slice is empty when no spots are in
+// the window.
 func (r *Ranker) Rank(band int) []Ranked {
 	cands := r.Candidates(band)
 	sorted := make([]Candidate, len(cands))
@@ -60,17 +80,39 @@ func (r *Ranker) Rank(band int) []Ranked {
 	})
 
 	out := make([]Ranked, 0, len(sorted))
-	chosen := false
 	for _, c := range sorted {
 		eligible, reason := r.eligibility(c)
-		rk := Ranked{Candidate: c, Eligible: eligible, Reason: reason}
-		if eligible && !chosen {
-			rk.Chosen = true
-			chosen = true
-		}
-		out = append(out, rk)
+		out = append(out, Ranked{Candidate: c, Eligible: eligible, Reason: reason})
 	}
+	r.markChosen(out, band)
 	return out
+}
+
+// markChosen sets Chosen on at most one row. With a PickFunc it flags the row
+// the chain would call (matched by callsign in SNR order, so the highest-SNR
+// instance of a repeated call wins, exactly as the chain picks). If the chain
+// declines, or its pick is no longer in the pool, no row is chosen. Without a
+// PickFunc it falls back to the top eligible row.
+func (r *Ranker) markChosen(out []Ranked, band int) {
+	if r.pick != nil {
+		sel, ok := r.pick(band)
+		if !ok {
+			return
+		}
+		for i := range out {
+			if out[i].Call == sel.Call {
+				out[i].Chosen = true
+				return
+			}
+		}
+		return
+	}
+	for i := range out {
+		if out[i].Eligible {
+			out[i].Chosen = true
+			return
+		}
+	}
 }
 
 // eligibility mirrors the per-record checks in SelectRecord: SNR bounds, then

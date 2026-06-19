@@ -153,6 +153,10 @@ func run() error {
 	}
 	defer func() { _ = seq.Close() }()
 
+	// Highlight the station the live chain would actually call (not the ranker's
+	// permissive top-SNR pick); seq.Pick follows hot reloads of the chain.
+	ranker.SetPick(seq.Pick)
+
 	// Hot-reload the configuration on SIGHUP. Selector chain, blacklist,
 	// retry_time, tx_retries, tx_power and follow_frequency take effect without
 	// a restart; socket/database/identity fields require one (see warnImmutable).

@@ -32,9 +32,12 @@ type Sequencer struct {
 	mycall     string
 	followFreq bool
 	txPower    int
-	chain      selector.Chain
-	cmds       chan<- db.Command
-	log        *slog.Logger
+	// chain is the live selector chain. The Run loop is its only writer (via
+	// applyReload), but Pick reads it from the TUI goroutine, so it is held in
+	// an atomic.Pointer to keep that read race-free across hot reloads.
+	chain atomic.Pointer[selector.Chain]
+	cmds  chan<- db.Command
+	log   *slog.Logger
 
 	loggerConn *net.UDPConn // optional secondary logger forward
 
@@ -85,6 +88,20 @@ func (s *Sequencer) Status() Status {
 	return st
 }
 
+// Pick reports the candidate the live selector chain would call next on a band,
+// or false when the chain declines. It runs the same Chain.Select the Run loop
+// uses, so the TUI can highlight exactly the station the autopilot will work.
+// Safe to call from any goroutine: the chain is read atomically and Select only
+// queries the (mutex-guarded, cached) candidate pool. It does not consider the
+// paused flag or in-flight QSO — it answers "who is next", not "are we calling".
+func (s *Sequencer) Pick(band int) (selector.Selection, bool) {
+	c := s.chain.Load()
+	if c == nil {
+		return selector.Selection{}, false
+	}
+	return c.Select(band)
+}
+
 // publishStatus snapshots the runtime fields for readers. Called from the Run
 // loop only, so reads of the runtime fields are race-free.
 func (s *Sequencer) publishStatus() {
@@ -122,7 +139,6 @@ func New(cfg config.FT8Ctrl, chain selector.Chain, cmds chan<- db.Command, log *
 		mycall:     cfg.MyCall,
 		followFreq: cfg.FollowFrequency,
 		txPower:    cfg.TXPower,
-		chain:      chain,
 		cmds:       cmds,
 		log:        log,
 		reload:     make(chan reloadParams, 1),
@@ -130,6 +146,7 @@ func New(cfg config.FT8Ctrl, chain selector.Chain, cmds chan<- db.Command, log *
 		tracker:    txTracker{max: cfg.TXRetries},
 		lastSecond: -1,
 	}
+	s.chain.Store(&chain)
 
 	if cfg.LoggerIP != "" && cfg.LoggerPort != 0 {
 		laddr := &net.UDPAddr{IP: net.ParseIP(cfg.LoggerIP), Port: cfg.LoggerPort}
@@ -175,7 +192,7 @@ func (s *Sequencer) Reload(cfg config.FT8Ctrl, chain selector.Chain) {
 func (s *Sequencer) applyReload() {
 	select {
 	case p := <-s.reload:
-		s.chain = p.chain
+		s.chain.Store(&p.chain)
 		s.txPower = p.txPower
 		s.followFreq = p.followFreq
 		s.tracker.max = p.txRetries
@@ -349,7 +366,7 @@ func (s *Sequencer) sequenceCheck() {
 	}
 	s.lastSecond = sec
 
-	sel, ok := s.chain.Select(db.Band(s.frequency))
+	sel, ok := s.chain.Load().Select(db.Band(s.frequency))
 	if !ok {
 		s.current = ""
 		return

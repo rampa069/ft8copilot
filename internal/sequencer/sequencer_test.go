@@ -81,7 +81,6 @@ func newTestSeq(cmdBuf int) (*Sequencer, chan db.Command) {
 	ch := make(chan db.Command, cmdBuf)
 	s := &Sequencer{
 		mycall:     "W6BSD",
-		chain:      nil,
 		cmds:       ch,
 		log:        slog.New(slog.NewTextHandler(discard{}, nil)),
 		sequence:   map[int]bool{},
@@ -89,6 +88,12 @@ func newTestSeq(cmdBuf int) (*Sequencer, chan db.Command) {
 		lastSecond: -1,
 	}
 	return s, ch
+}
+
+// setChain stores a chain into the atomic holder, for tests that build a
+// Sequencer by hand and need to seed or swap its selector chain.
+func setChain(s *Sequencer, c selector.Chain) {
+	s.chain.Store(&c)
 }
 
 type discard struct{}
@@ -193,7 +198,7 @@ func TestSequenceCheckSelectsStation(t *testing.T) {
 
 	cand := selector.Candidate{}
 	cand.Call = "CO8LY"
-	s.chain = selector.Chain{fakeSelector{name: "Any", cand: cand}}
+	setChain(s, selector.Chain{fakeSelector{name: "Any", cand: cand}})
 
 	// Pin the clock to a second that is in the sequence set.
 	orig := nowFunc
@@ -225,7 +230,7 @@ func TestReloadAppliesNewSettings(t *testing.T) {
 	s.followFreq = false
 	s.tracker.max = 5
 	oldChain := selector.Chain{fakeSelector{name: "Any"}}
-	s.chain = oldChain
+	setChain(s, oldChain)
 
 	newChain := selector.Chain{fakeSelector{name: "DXCC100"}}
 	s.Reload(config.FT8Ctrl{TXPower: 100, FollowFrequency: true, TXRetries: 3}, newChain)
@@ -244,8 +249,29 @@ func TestReloadAppliesNewSettings(t *testing.T) {
 	if s.tracker.max != 3 {
 		t.Errorf("tracker.max = %d, want 3", s.tracker.max)
 	}
-	if s.chain[0].Name() != "DXCC100" {
-		t.Errorf("chain not swapped: %q", s.chain[0].Name())
+	if got := (*s.chain.Load())[0].Name(); got != "DXCC100" {
+		t.Errorf("chain not swapped: %q", got)
+	}
+}
+
+func TestPickReturnsChainSelection(t *testing.T) {
+	s, _ := newTestSeq(0)
+	cand := selector.Candidate{}
+	cand.Call = "CO8LY"
+	setChain(s, selector.Chain{fakeSelector{name: "DXCC100", cand: cand}})
+
+	sel, ok := s.Pick(20)
+	if !ok {
+		t.Fatal("Pick returned ok=false, want a selection")
+	}
+	if sel.Call != "CO8LY" || sel.Selector != "DXCC100" {
+		t.Errorf("Pick = %q via %q, want CO8LY via DXCC100", sel.Call, sel.Selector)
+	}
+
+	// An empty chain declines.
+	setChain(s, selector.Chain{})
+	if _, ok := s.Pick(20); ok {
+		t.Error("empty chain should decline")
 	}
 }
 
@@ -265,7 +291,7 @@ func TestSequenceCheckSkipsWhileTransmitting(t *testing.T) {
 	s, _ := newTestSeq(4)
 	s.txStatus = true
 	s.sequence = map[int]bool{5: true}
-	s.chain = selector.Chain{fakeSelector{name: "Any"}}
+	setChain(s, selector.Chain{fakeSelector{name: "Any"}})
 	orig := nowFunc
 	nowFunc = func() time.Time { return time.Date(2026, 6, 18, 12, 0, 5, 0, time.UTC) }
 	defer func() { nowFunc = orig }()
