@@ -2,6 +2,7 @@ package sequencer
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +22,9 @@ func TestParseMessage(t *testing.T) {
 		{"CQ POTA K1ABC FN42", parsed{kind: msgCQ, call: "K1ABC", grid: "FN42", extra: "POTA"}},
 		{"CQ W1AW", parsed{kind: msgCQ, call: "W1AW"}}, // broken CQ, no grid
 		{"W6BSD CO8LY -10", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY"}},
-		{"W6BSD CO8LY RR73", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY"}},
+		{"W6BSD CO8LY RR73", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY", rr73: true}},
+		{"W6BSD CO8LY 73", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY", rr73: true}},
+		{"W6BSD CO8LY RRR", parsed{kind: msgReply, to: "W6BSD", call: "CO8LY"}}, // RRR is not a sign-off
 		{"CO8LY/P W6BSD -07", parsed{kind: msgReply, to: "CO8LY", call: "W6BSD"}},
 		{"random noise", parsed{kind: msgNone}},
 	}
@@ -151,6 +154,68 @@ func TestHandleDecodeReplyToUsIgnored(t *testing.T) {
 	select {
 	case cmd := <-ch:
 		t.Fatalf("unexpected command %T", cmd)
+	default:
+	}
+}
+
+func TestHandleDecodeRR73Disabled(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000
+	s.considerRR73 = false
+	// A third-party RR73 must be ignored while the option is off.
+	s.handleDecode(&wsjtx.DecodeMsg{Mode: wsjtx.ModeFT8, Message: "K1ABC CO8LY RR73"})
+	select {
+	case cmd := <-ch:
+		t.Fatalf("unexpected command %T with consider_rr73 off", cmd)
+	default:
+	}
+}
+
+func TestHandleDecodeRR73EnrolsThirdParty(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000
+	s.considerRR73 = true
+	for _, msg := range []string{"K1ABC CO8LY RR73", "K1ABC W1AW 73"} {
+		s.handleDecode(&wsjtx.DecodeMsg{Mode: wsjtx.ModeFT8, Message: msg})
+		cmd := <-ch
+		ins, ok := cmd.(db.InsertCmd)
+		if !ok {
+			t.Fatalf("%q: got %T, want InsertCmd", msg, cmd)
+		}
+		want := strings.Fields(msg)[1] // the transmitting station
+		if ins.Spot.Call != want || ins.Spot.Band != 20 || ins.Spot.Grid != "" {
+			t.Errorf("%q: got %+v, want call=%s band=20 grid=empty", msg, ins.Spot, want)
+		}
+	}
+}
+
+func TestHandleDecodeRR73ToUsNotEnrolled(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000
+	s.considerRR73 = true
+	// RR73 directed at us completes our own QSO; it is not a new candidate.
+	s.handleDecode(&wsjtx.DecodeMsg{Mode: wsjtx.ModeFT8, Message: "W6BSD CO8LY RR73"})
+	select {
+	case cmd := <-ch:
+		t.Fatalf("unexpected command %T for RR73 to us", cmd)
+	default:
+	}
+}
+
+func TestHandleDecodeRR73FromCurrentStops(t *testing.T) {
+	s, ch := newTestSeq(4)
+	s.frequency = 14074000
+	s.considerRR73 = true
+	s.current = "CO8LY" // we are working CO8LY
+	// CO8LY RR73s a third party: stop and forget it, never enrol it.
+	s.handleDecode(&wsjtx.DecodeMsg{Mode: wsjtx.ModeFT8, Message: "K1ABC CO8LY RR73"})
+	cmd := <-ch
+	if _, ok := cmd.(db.DeleteCmd); !ok {
+		t.Fatalf("got %T, want DeleteCmd (stop working the station)", cmd)
+	}
+	select {
+	case extra := <-ch:
+		t.Fatalf("unexpected second command %T (should not also enrol)", extra)
 	default:
 	}
 }

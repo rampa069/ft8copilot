@@ -19,6 +19,7 @@ const (
 	fldTXPower = iota
 	fldTXRetries
 	fldFollowFreq
+	fldConsiderRR73
 	fldRetryTime
 	fldSelectors
 	fldBlackList
@@ -26,12 +27,13 @@ const (
 )
 
 var paramLabels = [numFields]string{
-	fldTXPower:    "TX power (W)",
-	fldTXRetries:  "TX retries",
-	fldFollowFreq: "Follow freq",
-	fldRetryTime:  "Retry time (m)",
-	fldSelectors:  "Selectors",
-	fldBlackList:  "Blacklist",
+	fldTXPower:      "TX power (W)",
+	fldTXRetries:    "TX retries",
+	fldFollowFreq:   "Follow freq",
+	fldConsiderRR73: "Consider RR73",
+	fldRetryTime:    "Retry time (m)",
+	fldSelectors:    "Selectors",
+	fldBlackList:    "Blacklist",
 }
 
 // paramModal is the F4 parameter editor: a small form bound to the control
@@ -72,6 +74,7 @@ func (m *paramModal) open() tea.Cmd {
 	m.inputs[fldTXPower].SetValue(strconv.Itoa(p.TXPower))
 	m.inputs[fldTXRetries].SetValue(strconv.Itoa(p.TXRetries))
 	m.inputs[fldFollowFreq].SetValue(yesNo(p.FollowFrequency))
+	m.inputs[fldConsiderRR73].SetValue(yesNo(p.ConsiderRR73))
 	m.inputs[fldRetryTime].SetValue(strconv.Itoa(p.RetryTime))
 	m.inputs[fldSelectors].SetValue(strings.Join(p.CallSelector, " "))
 	m.inputs[fldBlackList].SetValue(strings.Join(p.BlackList, ", "))
@@ -127,6 +130,11 @@ func (m *paramModal) apply() {
 		m.status = "Follow freq must be yes or no"
 		return
 	}
+	considerRR73, err := parseBool(m.inputs[fldConsiderRR73].Value())
+	if err != nil {
+		m.status = "Consider RR73 must be yes or no"
+		return
+	}
 	retry, err := strconv.Atoi(strings.TrimSpace(m.inputs[fldRetryTime].Value()))
 	if err != nil {
 		m.status = "Retry time must be a number"
@@ -137,6 +145,7 @@ func (m *paramModal) apply() {
 		TXPower:         power,
 		TXRetries:       retries,
 		FollowFrequency: follow,
+		ConsiderRR73:    considerRR73,
 		RetryTime:       retry,
 		CallSelector:    strings.Fields(m.inputs[fldSelectors].Value()),
 		BlackList:       splitList(m.inputs[fldBlackList].Value()),

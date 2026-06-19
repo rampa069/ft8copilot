@@ -29,6 +29,7 @@ type Params struct {
 	TXPower         int
 	TXRetries       int
 	FollowFrequency bool
+	ConsiderRR73    bool
 	RetryTime       int // minutes
 	CallSelector    []string
 	BlackList       []string
@@ -69,6 +70,7 @@ func (c *Controller) Params() Params {
 		TXPower:         ft.TXPower,
 		TXRetries:       ft.TXRetries,
 		FollowFrequency: ft.FollowFrequency,
+		ConsiderRR73:    ft.ConsiderRR73,
 		RetryTime:       ft.RetryTime,
 		CallSelector:    append([]string(nil), ft.CallSelector...),
 		BlackList:       append([]string(nil), c.cfg.BlackList...),
@@ -88,6 +90,7 @@ func (c *Controller) Apply(p Params) error {
 	newCfg.FT8Ctrl.TXPower = p.TXPower
 	newCfg.FT8Ctrl.TXRetries = p.TXRetries
 	newCfg.FT8Ctrl.FollowFrequency = p.FollowFrequency
+	newCfg.FT8Ctrl.ConsiderRR73 = p.ConsiderRR73
 	newCfg.FT8Ctrl.RetryTime = p.RetryTime
 	newCfg.FT8Ctrl.CallSelector = append([]string(nil), p.CallSelector...)
 	newCfg.BlackList = blacklist.Normalize(p.BlackList)
@@ -113,7 +116,7 @@ func (c *Controller) Apply(p Params) error {
 	*c.cfg = newCfg
 	c.deps.Logger.Info("parameters applied via TUI",
 		"tx_power", p.TXPower, "tx_retries", p.TXRetries,
-		"follow_frequency", p.FollowFrequency, "retry_time", p.RetryTime,
-		"chain", newCfg.FT8Ctrl.CallSelector)
+		"follow_frequency", p.FollowFrequency, "consider_rr73", p.ConsiderRR73,
+		"retry_time", p.RetryTime, "chain", newCfg.FT8Ctrl.CallSelector)
 	return nil
 }

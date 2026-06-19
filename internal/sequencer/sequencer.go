@@ -28,10 +28,11 @@ var nowFunc = time.Now
 
 // Sequencer drives WSJT-X over UDP.
 type Sequencer struct {
-	conn       *net.UDPConn
-	mycall     string
-	followFreq bool
-	txPower    int
+	conn         *net.UDPConn
+	mycall       string
+	followFreq   bool
+	considerRR73 bool // also enrol stations sending RR73/73 as candidates
+	txPower      int
 	// chain is the live selector chain. The Run loop is its only writer (via
 	// applyReload), but Pick reads it from the TUI goroutine, so it is held in
 	// an atomic.Pointer to keep that read race-free across hot reloads.
@@ -135,16 +136,17 @@ func New(cfg config.FT8Ctrl, chain selector.Chain, cmds chan<- db.Command, log *
 	}
 
 	s := &Sequencer{
-		conn:       conn,
-		mycall:     cfg.MyCall,
-		followFreq: cfg.FollowFrequency,
-		txPower:    cfg.TXPower,
-		cmds:       cmds,
-		log:        log,
-		reload:     make(chan reloadParams, 1),
-		sequence:   map[int]bool{},
-		tracker:    txTracker{max: cfg.TXRetries},
-		lastSecond: -1,
+		conn:         conn,
+		mycall:       cfg.MyCall,
+		followFreq:   cfg.FollowFrequency,
+		considerRR73: cfg.ConsiderRR73,
+		txPower:      cfg.TXPower,
+		cmds:         cmds,
+		log:          log,
+		reload:       make(chan reloadParams, 1),
+		sequence:     map[int]bool{},
+		tracker:      txTracker{max: cfg.TXRetries},
+		lastSecond:   -1,
 	}
 	s.chain.Store(&chain)
 
@@ -162,10 +164,11 @@ func New(cfg config.FT8Ctrl, chain selector.Chain, cmds chan<- db.Command, log *
 // reloadParams holds the subset of configuration that can be applied to a
 // running Sequencer without reopening sockets or the database.
 type reloadParams struct {
-	chain      selector.Chain
-	txPower    int
-	followFreq bool
-	txRetries  int
+	chain        selector.Chain
+	txPower      int
+	followFreq   bool
+	considerRR73 bool
+	txRetries    int
 }
 
 // Reload hands new hot-reloadable settings to the running Sequencer. It is
@@ -174,10 +177,11 @@ type reloadParams struct {
 // a single goroutine (the SIGHUP handler).
 func (s *Sequencer) Reload(cfg config.FT8Ctrl, chain selector.Chain) {
 	p := reloadParams{
-		chain:      chain,
-		txPower:    cfg.TXPower,
-		followFreq: cfg.FollowFrequency,
-		txRetries:  cfg.TXRetries,
+		chain:        chain,
+		txPower:      cfg.TXPower,
+		followFreq:   cfg.FollowFrequency,
+		considerRR73: cfg.ConsiderRR73,
+		txRetries:    cfg.TXRetries,
 	}
 	// Discard any unconsumed reload so we always apply the latest.
 	select {
@@ -195,9 +199,11 @@ func (s *Sequencer) applyReload() {
 		s.chain.Store(&p.chain)
 		s.txPower = p.txPower
 		s.followFreq = p.followFreq
+		s.considerRR73 = p.considerRR73
 		s.tracker.max = p.txRetries
 		s.log.Info("sequencer reloaded", "tx_retries", p.txRetries,
-			"tx_power", p.txPower, "follow_frequency", p.followFreq)
+			"tx_power", p.txPower, "follow_frequency", p.followFreq,
+			"consider_rr73", p.considerRR73)
 	default:
 	}
 }
@@ -274,6 +280,28 @@ func (s *Sequencer) handleDecode(p *wsjtx.DecodeMsg) {
 				"call", m.call, "to", m.to)
 			s.stopTransmit()
 			s.send(db.DeleteCmd{Call: m.call, Band: band})
+			return
+		}
+		// consider_rr73: a station signing off a QSO with a third party is about
+		// to be free — enrol it as a candidate (no grid, like a broken CQ).
+		if s.considerRR73 && m.rr73 && m.to != s.mycall {
+			s.log.Info("enrolling RR73/73 station", "call", m.call, "to", m.to)
+			s.send(db.InsertCmd{Spot: db.Spot{
+				Call:      m.call,
+				Frequency: s.frequency,
+				Band:      band,
+				Packet: db.Packet{
+					New:            p.New,
+					Time:           p.Time,
+					SNR:            p.SNR,
+					DeltaTime:      p.DeltaTime,
+					DeltaFrequency: p.DeltaFrequency,
+					Mode:           string(p.Mode),
+					Message:        p.Message,
+					LowConfidence:  p.LowConfidence,
+					OffAir:         p.OffAir,
+				},
+			}})
 		}
 	case msgCQ:
 		s.send(db.InsertCmd{Spot: db.Spot{

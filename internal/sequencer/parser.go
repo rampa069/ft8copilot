@@ -1,6 +1,9 @@
 package sequencer
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // msgKind classifies a decoded FT8/FT4 message.
 type msgKind int
@@ -18,6 +21,7 @@ type parsed struct {
 	call  string // the transmitting station
 	grid  string // CQ: 4-char Maidenhead grid (may be empty for a broken CQ)
 	extra string // CQ: optional tag between "CQ" and the call (e.g. "DX", "POTA")
+	rr73  bool   // REPLY: report token was RR73 or 73 (station signing off a QSO)
 }
 
 // Message-parsing regexps. Go's regexp (RE2) has no lookahead, so the REPLY
@@ -40,6 +44,7 @@ func parseMessage(message string) parsed {
 				kind: msgReply,
 				to:   to,
 				call: m[replyRe.SubexpIndex("call")],
+				rr73: isSignOff(message),
 			}
 		}
 	}
@@ -57,4 +62,19 @@ func parseMessage(message string) parsed {
 		return parsed{kind: msgCQ, call: m[brokenCQRe.SubexpIndex("call")]}
 	}
 	return parsed{kind: msgNone}
+}
+
+// isSignOff reports whether a reply's report token is RR73 or 73, i.e. the
+// transmitting station is wrapping up a QSO (and is about to be free). The
+// report is the third field of "<to> <call> <report>".
+func isSignOff(message string) bool {
+	fields := strings.Fields(message)
+	if len(fields) < 3 {
+		return false
+	}
+	switch fields[2] {
+	case "RR73", "73":
+		return true
+	}
+	return false
 }

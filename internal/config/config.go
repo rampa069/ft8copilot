@@ -45,7 +45,8 @@ type FT8Ctrl struct {
 	WSJTIP          string     `yaml:"wsjt_ip"`
 	WSJTPort        int        `yaml:"wsjt_port"`
 	FollowFrequency bool       `yaml:"follow_frequency"`
-	RetryTime       int        `yaml:"retry_time"` // minutes
+	ConsiderRR73    bool       `yaml:"consider_rr73"` // also treat stations sending RR73/73 as candidates
+	RetryTime       int        `yaml:"retry_time"`    // minutes
 	TXPower         int        `yaml:"tx_power"`
 	TXRetries       int        `yaml:"tx_retries"` // defaults to 5 when absent
 	CallSelector    StringList `yaml:"call_selector"`
