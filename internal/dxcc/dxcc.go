@@ -18,11 +18,13 @@ var ErrNotFound = errors.New("dxcc: no matching entity")
 
 // Entity describes a resolved DXCC entity for a callsign or prefix lookup.
 type Entity struct {
-	Prefix    string // the matching prefix (or exact call) that resolved the lookup
-	Country   string // DXCC entity / country name
-	Continent string // two-letter continent code (e.g. NA, EU, AS, OC)
-	CQZone    int    // CQ zone
-	ITUZone   int    // ITU zone
+	Prefix    string  // the matching prefix (or exact call) that resolved the lookup
+	Country   string  // DXCC entity / country name
+	Continent string  // two-letter continent code (e.g. NA, EU, AS, OC)
+	CQZone    int     // CQ zone
+	ITUZone   int     // ITU zone
+	Lat       float64 // entity centroid latitude (north positive)
+	Lon       float64 // entity centroid longitude (east positive)
 }
 
 // alias is a single prefix or exact-call entry with optional per-alias zone /
@@ -33,6 +35,8 @@ type alias struct {
 	continent string
 	cqZone    int
 	ituZone   int
+	lat       float64 // entity centroid latitude (north positive)
+	lon       float64 // entity centroid longitude (east positive)
 }
 
 // DXCC holds the parsed cty.dat data and provides lookup operations.
@@ -107,6 +111,10 @@ func (d *DXCC) parseRecord(record string) error {
 	cqZone := atoiSafe(fields[1])
 	ituZone := atoiSafe(fields[2])
 	continent := strings.TrimSpace(fields[3])
+	// cty.dat longitude is degrees WEST-positive; negate it to the east-positive
+	// convention used by geo.Point (and Maidenhead-derived coordinates).
+	lat := atofSafe(fields[4])
+	lon := -atofSafe(fields[5])
 	primary := strings.TrimSpace(fields[7])
 	// A leading '*' marks a non-DXCC entity (e.g. a club); strip it.
 	primary = strings.TrimPrefix(primary, "*")
@@ -116,6 +124,8 @@ func (d *DXCC) parseRecord(record string) error {
 		continent: continent,
 		cqZone:    cqZone,
 		ituZone:   ituZone,
+		lat:       lat,
+		lon:       lon,
 	}
 
 	var prefixes []string
@@ -219,6 +229,11 @@ func atoiSafe(s string) int {
 	return n
 }
 
+func atofSafe(s string) float64 {
+	f, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	return f
+}
+
 // Lookup resolves a callsign (or prefix) to its DXCC entity. It first tries an
 // exact-call match, then falls back to the longest matching prefix.
 func (d *DXCC) Lookup(call string) (Entity, error) {
@@ -254,6 +269,8 @@ func (a alias) entity() Entity {
 		Continent: a.continent,
 		CQZone:    a.cqZone,
 		ITUZone:   a.ituZone,
+		Lat:       a.lat,
+		Lon:       a.lon,
 	}
 }
 

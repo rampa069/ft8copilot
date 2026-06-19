@@ -138,6 +138,12 @@ func (w *Writer) insert(spot Spot) error {
 		w.log.Error("DXCC lookup failed, probably a fake callsign", "call", spot.Call)
 		return nil
 	}
+	// Without a grid (a broken CQ, or an RR73/73 enrolment) GridToLatLon yields
+	// the null island (0,0), which makes every such spot report a bogus ~4000 km.
+	// Fall back to the DXCC entity centroid for a sensible country-level distance.
+	if spot.Grid == "" && (entity.Lat != 0 || entity.Lon != 0) {
+		point = geo.Point{Lat: entity.Lat, Lon: entity.Lon}
+	}
 
 	packetJSON, err := json.Marshal(spot.Packet)
 	if err != nil {
