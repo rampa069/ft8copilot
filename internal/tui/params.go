@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/rampa069/ft8copilot/internal/control"
 	"github.com/rampa069/ft8copilot/internal/selector"
@@ -156,19 +157,20 @@ func (m paramModal) view(screenW, screenH int) string {
 	}
 	interiorW := dw - 2
 
-	// Give the focused input a fixed visible width so a long value (the
-	// Selectors/Blacklist chains) scrolls horizontally and keeps the cursor in
-	// view while editing, instead of overflowing and being clipped. Only the
-	// focused field gets a Width: a blurred textinput with Width set emits a
-	// stray escape that shows as an unpainted cell, and blurred fields don't
-	// need scrolling. fitANSI pads/clips the rest with the panel background.
-	inputW := interiorW - paramLabelW - 1
-	if inputW < 8 {
-		inputW = 8
+	// Width available for a field's value: the panel interior minus the label
+	// column and the one-space gutter. Every field's rendered view is clamped to
+	// this with an ANSI-aware truncation so a long value (the Selectors/Blacklist
+	// chains) can never push the row past the interior — an overflow there makes
+	// box()'s ANSI-naive padInterior mangle the whole line. The focused field
+	// gets a textinput Width so its value scrolls and keeps the cursor in view
+	// while editing; blurred fields keep Width 0 (they render fully painted).
+	availW := interiorW - paramLabelW - 1
+	if availW < 8 {
+		availW = 8
 	}
 	for i := range m.inputs {
 		if i == m.focus {
-			m.inputs[i].Width = inputW
+			m.inputs[i].Width = availW - 1 // textinput renders Width+1 cells
 		} else {
 			m.inputs[i].Width = 0
 		}
@@ -182,7 +184,8 @@ func (m paramModal) view(screenW, screenH int) string {
 		} else {
 			label = stStatLabel.Render(fit("  "+paramLabels[i], paramLabelW))
 		}
-		lines = append(lines, fitANSI(label+bgSpaces(1)+m.inputs[i].View(), interiorW))
+		field := ansi.Truncate(m.inputs[i].View(), availW, "")
+		lines = append(lines, fitANSI(label+bgSpaces(1)+field, interiorW))
 		// Spell out the selector chain right under its row: the order (= match
 		// priority), which selectors are still free to add, and any typo.
 		if i == fldSelectors {
